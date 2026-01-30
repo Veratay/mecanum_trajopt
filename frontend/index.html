@@ -7,133 +7,324 @@
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Mecanum Trajectory Optimizer</h1>
-            <p class="subtitle">Click to place waypoints, drag to move, drag arrow to rotate heading</p>
-        </header>
-
-        <div class="main-content">
-            <div class="canvas-container">
-                <canvas id="field-canvas" width="600" height="600"></canvas>
-                <div class="canvas-overlay">
-                    <span id="mouse-pos"></span>
+    <div class="app-container">
+        <!-- Top Toolbar -->
+        <header class="toolbar">
+            <div class="toolbar-left">
+                <button class="menu-btn" id="menu-toggle">
+                    <span></span><span></span><span></span>
+                </button>
+                <span class="app-title">Choreo</span>
+                <div class="toolbar-actions">
+                    <button class="toolbar-btn" title="Undo">&#x21B6;</button>
+                    <button class="toolbar-btn" title="Redo">&#x21B7;</button>
                 </div>
             </div>
+            <div class="toolbar-center">
+                <button class="toolbar-btn active" title="Select">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <rect x="2" y="2" width="12" height="12" rx="2"/>
+                    </svg>
+                </button>
+                <button class="toolbar-btn" title="Pan">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <circle cx="8" cy="8" r="6"/>
+                    </svg>
+                </button>
+                <button class="toolbar-btn" title="Zoom">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="8" cy="8" r="5"/>
+                    </svg>
+                </button>
+                <div class="toolbar-separator"></div>
+                <button class="toolbar-btn" id="solve-btn" title="Solve">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M4 2 L4 14 L14 8 Z"/>
+                    </svg>
+                </button>
+                <button class="toolbar-btn" title="Stop">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                        <rect x="3" y="3" width="10" height="10"/>
+                    </svg>
+                </button>
+                <div class="toolbar-separator"></div>
+                <button class="toolbar-btn" title="Center View">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <circle cx="8" cy="8" r="3"/>
+                        <line x1="8" y1="1" x2="8" y2="4"/>
+                        <line x1="8" y1="12" x2="8" y2="15"/>
+                        <line x1="1" y1="8" x2="4" y2="8"/>
+                        <line x1="12" y1="8" x2="15" y2="8"/>
+                    </svg>
+                </button>
+                <button class="toolbar-btn" title="Fit View">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="2" y="2" width="12" height="12" rx="1"/>
+                        <line x1="2" y1="5" x2="5" y2="5"/>
+                        <line x1="11" y1="5" x2="14" y2="5"/>
+                        <line x1="2" y1="11" x2="5" y2="11"/>
+                        <line x1="11" y1="11" x2="14" y2="11"/>
+                    </svg>
+                </button>
+                <button class="toolbar-btn" title="Toggle Grid">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1">
+                        <line x1="5" y1="0" x2="5" y2="16"/>
+                        <line x1="11" y1="0" x2="11" y2="16"/>
+                        <line x1="0" y1="5" x2="16" y2="5"/>
+                        <line x1="0" y1="11" x2="16" y2="11"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="toolbar-right">
+                <div class="coord-inputs">
+                    <div class="coord-input">
+                        <label>x</label>
+                        <input type="text" id="coord-x" value="0.00" readonly>
+                        <span class="unit">m</span>
+                    </div>
+                    <div class="coord-input">
+                        <label>y</label>
+                        <input type="text" id="coord-y" value="0.00" readonly>
+                        <span class="unit">m</span>
+                    </div>
+                    <div class="coord-input">
+                        <label>&theta;</label>
+                        <input type="text" id="coord-theta" value="0" readonly>
+                        <span class="unit">deg</span>
+                    </div>
+                </div>
+                <div class="toolbar-separator"></div>
+                <div class="samples-control">
+                    <span>Samples</span>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="split-checkbox">
+                        Split
+                    </label>
+                    <input type="number" id="steps-per-segment" value="20" min="5" max="100" class="samples-input">
+                </div>
+            </div>
+        </header>
 
-            <div class="sidebar">
-                <section class="panel">
-                    <h2>Field Settings</h2>
-                    <div class="param-group">
-                        <label for="field-size">Field Size (m)</label>
-                        <input type="number" id="field-size" value="3.66" step="0.1" min="0.5" max="20">
+        <div class="main-area">
+            <!-- Left Sidebar -->
+            <aside class="sidebar">
+                <!-- Paths Section -->
+                <section class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-title">PATHS</span>
+                        <div class="section-actions">
+                            <button class="icon-btn" title="Duplicate"><span>&#x2398;</span></button>
+                            <button class="icon-btn" title="Add"><span>+</span></button>
+                        </div>
                     </div>
-                    <div class="field-background">
-                        <label>Background Image</label>
-                        <div class="file-input-wrapper">
-                            <input type="file" id="bg-image-input" accept="image/*,.svg">
-                            <button id="bg-image-btn" class="btn btn-secondary btn-small">Choose File</button>
-                            <span id="bg-image-name">No file chosen</span>
-                        </div>
-                        <button id="clear-bg-btn" class="btn btn-secondary btn-small">Clear Background</button>
-                    </div>
-                    <div class="bg-controls" id="bg-controls" style="display: none;">
-                        <div class="param-group">
-                            <label for="bg-scale">Scale</label>
-                            <input type="range" id="bg-scale" min="0.1" max="3" step="0.01" value="1">
-                            <span id="bg-scale-value">1.00</span>
-                        </div>
-                        <div class="param-group">
-                            <label for="bg-rotation">Rotation</label>
-                            <input type="range" id="bg-rotation" min="0" max="360" step="1" value="0">
-                            <span id="bg-rotation-value">0°</span>
-                        </div>
-                        <div class="param-group">
-                            <label for="bg-opacity">Opacity</label>
-                            <input type="range" id="bg-opacity" min="0" max="1" step="0.05" value="0.5">
-                            <span id="bg-opacity-value">0.50</span>
-                        </div>
-                        <div class="mirror-controls">
-                            <label>
-                                <input type="checkbox" id="bg-mirror-h">
-                                Mirror Horizontal
-                            </label>
-                            <label>
-                                <input type="checkbox" id="bg-mirror-v">
-                                Mirror Vertical
-                            </label>
+                    <div class="section-content">
+                        <div class="path-item active">
+                            <span class="path-icon">&#x1D4AB;</span>
+                            <span class="path-name">New Path</span>
+                            <button class="icon-btn small" title="Settings">&#x2699;</button>
+                            <button class="icon-btn small" title="Delete">&#x1F5D1;</button>
                         </div>
                     </div>
                 </section>
 
-                <section class="panel">
-                    <h2>Waypoints</h2>
-                    <div id="waypoint-list"></div>
-                    <button id="clear-waypoints" class="btn btn-secondary">Clear All</button>
+                <!-- Features Section -->
+                <section class="sidebar-section">
+                    <div class="section-header">
+                        <span class="section-title">FEATURES</span>
+                    </div>
+
+                    <!-- Waypoints -->
+                    <div class="subsection">
+                        <div class="subsection-header">
+                            <span class="subsection-title">WAYPOINTS</span>
+                        </div>
+                        <div class="subsection-content" id="waypoint-list">
+                            <!-- Waypoints will be populated by JavaScript -->
+                        </div>
+                    </div>
+
+                    <!-- Constraints -->
+                    <div class="subsection">
+                        <div class="subsection-header">
+                            <span class="subsection-title">CONSTRAINTS</span>
+                        </div>
+                        <div class="subsection-content" id="constraints-list">
+                            <div class="constraint-item">
+                                <span class="constraint-icon stop">&#x23F9;</span>
+                                <span class="constraint-name">Stop</span>
+                                <span class="constraint-scope">Start</span>
+                                <input type="checkbox" checked>
+                                <button class="icon-btn small">&#x1F5D1;</button>
+                            </div>
+                            <div class="constraint-item">
+                                <span class="constraint-icon stop">&#x23F9;</span>
+                                <span class="constraint-name">Stop</span>
+                                <span class="constraint-scope">End</span>
+                                <input type="checkbox" checked>
+                                <button class="icon-btn small">&#x1F5D1;</button>
+                            </div>
+                            <div class="constraint-item">
+                                <span class="constraint-icon rect">&#x25A1;</span>
+                                <span class="constraint-name">Keep In Rect</span>
+                                <span class="constraint-scope">All</span>
+                                <input type="checkbox" checked>
+                                <button class="icon-btn small">&#x1F5D1;</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Markers -->
+                    <div class="subsection">
+                        <div class="subsection-header">
+                            <span class="subsection-title">MARKERS</span>
+                        </div>
+                        <div class="subsection-content" id="markers-list">
+                            <div class="empty-message">No Event Markers</div>
+                        </div>
+                    </div>
                 </section>
 
-                <section class="panel collapsible">
-                    <h2 class="panel-header" data-toggle="robot-params">Robot Parameters <span class="toggle-icon">▼</span></h2>
-                    <div id="robot-params" class="panel-content">
-                        <div class="param-group">
-                            <label for="param-mass">Mass (kg)</label>
+                <!-- Robot Parameters (Collapsible) -->
+                <section class="sidebar-section collapsible collapsed">
+                    <div class="section-header clickable" data-toggle="robot-params">
+                        <span class="section-title">ROBOT PARAMETERS</span>
+                        <span class="toggle-icon">&#x25BC;</span>
+                    </div>
+                    <div class="section-content" id="robot-params">
+                        <div class="param-row">
+                            <label>Mass (kg)</label>
                             <input type="number" id="param-mass" value="15.0" step="0.1" min="1">
                         </div>
-                        <div class="param-group">
-                            <label for="param-inertia">Inertia (kg*m²)</label>
+                        <div class="param-row">
+                            <label>Inertia (kg*m&sup2;)</label>
                             <input type="number" id="param-inertia" value="0.5" step="0.01" min="0.01">
                         </div>
-                        <div class="param-group">
-                            <label for="param-wheel-radius">Wheel Radius (m)</label>
+                        <div class="param-row">
+                            <label>Wheel Radius (m)</label>
                             <input type="number" id="param-wheel-radius" value="0.05" step="0.005" min="0.01">
                         </div>
-                        <div class="param-group">
-                            <label for="param-lx">Wheelbase X/2 (m)</label>
+                        <div class="param-row">
+                            <label>Wheelbase X/2 (m)</label>
                             <input type="number" id="param-lx" value="0.15" step="0.01" min="0.01">
                         </div>
-                        <div class="param-group">
-                            <label for="param-ly">Wheelbase Y/2 (m)</label>
+                        <div class="param-row">
+                            <label>Wheelbase Y/2 (m)</label>
                             <input type="number" id="param-ly" value="0.15" step="0.01" min="0.01">
                         </div>
-                        <div class="param-group">
-                            <label for="param-wmax">Motor Max Speed (rad/s)</label>
+                        <div class="param-row">
+                            <label>Motor Max Speed (rad/s)</label>
                             <input type="number" id="param-wmax" value="100" step="1" min="1">
                         </div>
-                        <div class="param-group">
-                            <label for="param-tmax">Motor Max Torque (N*m)</label>
+                        <div class="param-row">
+                            <label>Motor Max Torque (N*m)</label>
                             <input type="number" id="param-tmax" value="1.0" step="0.1" min="0.1">
                         </div>
-                        <div class="param-group">
-                            <label for="param-ftraction">Max Traction Force (N)</label>
+                        <div class="param-row">
+                            <label>Max Traction Force (N)</label>
                             <input type="number" id="param-ftraction" value="20.0" step="1" min="1">
                         </div>
                     </div>
                 </section>
 
-                <section class="panel">
-                    <h2>Solve</h2>
-                    <div class="param-group">
-                        <label for="steps-per-segment">Steps per Segment</label>
-                        <input type="number" id="steps-per-segment" value="20" step="1" min="5" max="100">
+                <!-- Field Settings (Collapsible) -->
+                <section class="sidebar-section collapsible collapsed">
+                    <div class="section-header clickable" data-toggle="field-settings">
+                        <span class="section-title">FIELD SETTINGS</span>
+                        <span class="toggle-icon">&#x25BC;</span>
                     </div>
-                    <button id="solve-btn" class="btn btn-primary">Solve Trajectory</button>
+                    <div class="section-content" id="field-settings">
+                        <div class="param-row">
+                            <label>Field Size (m)</label>
+                            <input type="number" id="field-size" value="3.66" step="0.1" min="0.5" max="20">
+                        </div>
+                        <div class="param-row file-row">
+                            <label>Background</label>
+                            <input type="file" id="bg-image-input" accept="image/*,.svg" style="display:none;">
+                            <button id="bg-image-btn" class="file-btn">Choose File</button>
+                            <span id="bg-image-name" class="file-name">None</span>
+                            <button id="clear-bg-btn" class="icon-btn small">&#x2715;</button>
+                        </div>
+                        <div class="bg-controls" id="bg-controls" style="display: none;">
+                            <div class="param-row slider-row">
+                                <label>Scale</label>
+                                <input type="range" id="bg-scale" min="0.1" max="3" step="0.01" value="1">
+                                <span id="bg-scale-value">1.00</span>
+                            </div>
+                            <div class="param-row slider-row">
+                                <label>Rotation</label>
+                                <input type="range" id="bg-rotation" min="0" max="360" step="1" value="0">
+                                <span id="bg-rotation-value">0&deg;</span>
+                            </div>
+                            <div class="param-row slider-row">
+                                <label>Opacity</label>
+                                <input type="range" id="bg-opacity" min="0" max="1" step="0.05" value="0.5">
+                                <span id="bg-opacity-value">0.50</span>
+                            </div>
+                            <div class="param-row checkbox-row">
+                                <label><input type="checkbox" id="bg-mirror-h"> Mirror H</label>
+                                <label><input type="checkbox" id="bg-mirror-v"> Mirror V</label>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Status Panel -->
+                <section class="sidebar-section status-section">
                     <div id="solve-status" class="status"></div>
                     <div id="solve-results" class="results"></div>
                 </section>
+            </aside>
 
-                <section class="panel">
-                    <h2>Playback</h2>
-                    <div class="playback-controls">
-                        <button id="play-btn" class="btn btn-secondary" disabled>Play</button>
-                        <button id="reset-btn" class="btn btn-secondary" disabled>Reset</button>
-                    </div>
-                    <div class="playback-slider">
-                        <input type="range" id="time-slider" min="0" max="100" value="0" disabled>
-                        <span id="time-display">0.00s</span>
-                    </div>
-                </section>
-            </div>
+            <!-- Canvas Area -->
+            <main class="canvas-area">
+                <div class="canvas-wrapper">
+                    <canvas id="field-canvas" width="800" height="800"></canvas>
+                </div>
+            </main>
+
+            <!-- Right Panel (optional, for future use) -->
+            <aside class="right-panel">
+                <button class="panel-btn" title="Layers">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="3" y="3" width="14" height="14" rx="2"/>
+                    </svg>
+                </button>
+                <button class="panel-btn" title="Variables">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor">
+                        <text x="5" y="15" font-size="14" font-family="serif" font-style="italic">x</text>
+                    </svg>
+                </button>
+                <button class="panel-btn" title="Visibility">
+                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <ellipse cx="10" cy="10" rx="7" ry="4"/>
+                        <circle cx="10" cy="10" r="2"/>
+                    </svg>
+                </button>
+            </aside>
         </div>
+
+        <!-- Bottom Timeline -->
+        <footer class="timeline">
+            <button class="timeline-btn play-btn" id="play-btn" disabled>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+                    <path d="M3 1 L3 13 L12 7 Z"/>
+                </svg>
+            </button>
+            <div class="timeline-track">
+                <div class="timeline-bg" id="timeline-bg"></div>
+                <div class="timeline-progress" id="timeline-progress"></div>
+                <div class="timeline-markers" id="timeline-markers">
+                    <!-- Markers will be added by JavaScript -->
+                </div>
+                <input type="range" id="time-slider" class="timeline-slider" min="0" max="1000" value="0" disabled>
+                <div class="timeline-scrubber" id="timeline-scrubber"></div>
+            </div>
+            <div class="timeline-time">
+                <span id="time-display">0.0 s</span>
+                <span class="time-separator">/</span>
+                <span id="total-time">0.0 s</span>
+            </div>
+        </footer>
     </div>
 
     <script src="/static/app.js"></script>

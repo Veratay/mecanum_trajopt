@@ -2,11 +2,12 @@
  * Mecanum Trajectory Optimizer - Frontend Application
  *
  * Interactive canvas for waypoint placement and trajectory visualization.
+ * Choreo-style UI with timeline and modern controls.
  */
 
 // Field and canvas dimensions
 let FIELD_SIZE = 3.66; // meters (configurable)
-const CANVAS_SIZE = 600; // pixels
+const CANVAS_SIZE = 800; // pixels
 let SCALE = CANVAS_SIZE / FIELD_SIZE; // pixels per meter
 
 // Robot dimensions for visualization
@@ -14,9 +15,9 @@ const ROBOT_WIDTH = 0.35; // meters
 const ROBOT_LENGTH = 0.35; // meters
 
 // Waypoint visualization
-const WAYPOINT_RADIUS = 15; // pixels
-const HEADING_LINE_LENGTH = 30; // pixels
-const HEADING_HANDLE_RADIUS = 8; // pixels for the draggable arrow tip
+const WAYPOINT_RADIUS = 18; // pixels
+const HEADING_LINE_LENGTH = 35; // pixels
+const HEADING_HANDLE_RADIUS = 10; // pixels for the draggable arrow tip
 
 // Application state
 const state = {
@@ -45,11 +46,13 @@ let canvas, ctx;
 
 // DOM elements
 let waypointListEl, solveBtn, solveStatusEl, solveResultsEl;
-let playBtn, resetBtn, timeSlider, timeDisplay, mousePosEl;
+let playBtn, timeSlider, timeDisplay, totalTimeDisplay;
 let fieldSizeInput, bgImageInput, bgControls;
 let bgScaleSlider, bgRotationSlider, bgOpacitySlider;
 let bgMirrorH, bgMirrorV;
 let stepsPerSegmentInput;
+let coordXEl, coordYEl, coordThetaEl;
+let timelineProgress, timelineScrubber, timelineMarkers;
 
 /**
  * Initialize the application
@@ -64,10 +67,19 @@ function init() {
     solveStatusEl = document.getElementById('solve-status');
     solveResultsEl = document.getElementById('solve-results');
     playBtn = document.getElementById('play-btn');
-    resetBtn = document.getElementById('reset-btn');
     timeSlider = document.getElementById('time-slider');
     timeDisplay = document.getElementById('time-display');
-    mousePosEl = document.getElementById('mouse-pos');
+    totalTimeDisplay = document.getElementById('total-time');
+
+    // Coordinate display
+    coordXEl = document.getElementById('coord-x');
+    coordYEl = document.getElementById('coord-y');
+    coordThetaEl = document.getElementById('coord-theta');
+
+    // Timeline elements
+    timelineProgress = document.getElementById('timeline-progress');
+    timelineScrubber = document.getElementById('timeline-scrubber');
+    timelineMarkers = document.getElementById('timeline-markers');
 
     // Field settings
     fieldSizeInput = document.getElementById('field-size');
@@ -93,9 +105,7 @@ function init() {
 
     // Button event listeners
     solveBtn.addEventListener('click', solve);
-    document.getElementById('clear-waypoints').addEventListener('click', clearWaypoints);
     playBtn.addEventListener('click', togglePlayback);
-    resetBtn.addEventListener('click', resetPlayback);
     timeSlider.addEventListener('input', handleSliderChange);
 
     // Field size
@@ -114,14 +124,15 @@ function init() {
     bgMirrorV.addEventListener('change', handleBgSettingChange);
 
     // Collapsible panels
-    document.querySelectorAll('.panel.collapsible .panel-header').forEach(header => {
+    document.querySelectorAll('.sidebar-section.collapsible .section-header').forEach(header => {
         header.addEventListener('click', () => {
-            header.closest('.panel').classList.toggle('collapsed');
+            header.closest('.sidebar-section').classList.toggle('collapsed');
         });
     });
 
     // Initial render
     render();
+    updateWaypointList();
 }
 
 /**
@@ -216,7 +227,7 @@ function handleBackgroundImageSelect(e) {
 function clearBackgroundImage() {
     state.backgroundImage = null;
     bgControls.style.display = 'none';
-    document.getElementById('bg-image-name').textContent = 'No file chosen';
+    document.getElementById('bg-image-name').textContent = 'None';
     bgImageInput.value = '';
     render();
 }
@@ -233,7 +244,7 @@ function handleBgSettingChange() {
 
     // Update display values
     document.getElementById('bg-scale-value').textContent = state.backgroundSettings.scale.toFixed(2);
-    document.getElementById('bg-rotation-value').textContent = state.backgroundSettings.rotation + '°';
+    document.getElementById('bg-rotation-value').textContent = state.backgroundSettings.rotation + '\u00B0';
     document.getElementById('bg-opacity-value').textContent = state.backgroundSettings.opacity.toFixed(2);
 
     render();
@@ -250,8 +261,8 @@ function handleCanvasClick(e) {
     }
 
     const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
 
     // Check if clicking on existing waypoint or heading handle
     const clickedWp = findWaypointAt(canvasX, canvasY);
@@ -270,8 +281,8 @@ function handleCanvasClick(e) {
  */
 function handleMouseDown(e) {
     const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
 
     // First check for heading handle (arrow tip)
     const headingIdx = findHeadingHandleAt(canvasX, canvasY);
@@ -288,6 +299,7 @@ function handleMouseDown(e) {
         state.selectedWaypoint = wpIndex;
         state.isDragging = true;
         canvas.style.cursor = 'grabbing';
+        highlightWaypoint(wpIndex);
     }
 }
 
@@ -296,12 +308,12 @@ function handleMouseDown(e) {
  */
 function handleMouseMove(e) {
     const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
 
-    // Update mouse position display
+    // Update coordinate display
     const fieldPos = canvasToField(canvasX, canvasY);
-    mousePosEl.textContent = `(${fieldPos.x.toFixed(2)}m, ${fieldPos.y.toFixed(2)}m)`;
+    updateCoordinateDisplay(fieldPos.x, fieldPos.y, null);
 
     if (state.isDraggingHeading && state.selectedWaypoint !== null) {
         // Update heading based on mouse position relative to waypoint
@@ -318,12 +330,15 @@ function handleMouseMove(e) {
         while (wp.heading > Math.PI) wp.heading -= 2 * Math.PI;
         while (wp.heading < -Math.PI) wp.heading += 2 * Math.PI;
 
+        updateCoordinateDisplay(wp.x, wp.y, wp.heading * 180 / Math.PI);
         updateWaypointList();
         render();
     } else if (state.isDragging && state.selectedWaypoint !== null) {
         // Update waypoint position
         state.waypoints[state.selectedWaypoint].x = fieldPos.x;
         state.waypoints[state.selectedWaypoint].y = fieldPos.y;
+        const wp = state.waypoints[state.selectedWaypoint];
+        updateCoordinateDisplay(wp.x, wp.y, wp.heading * 180 / Math.PI);
         updateWaypointList();
         render();
     } else {
@@ -360,8 +375,8 @@ function handleWheel(e) {
     e.preventDefault();
 
     const rect = canvas.getBoundingClientRect();
-    const canvasX = e.clientX - rect.left;
-    const canvasY = e.clientY - rect.top;
+    const canvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const canvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
 
     const wpIndex = findWaypointAt(canvasX, canvasY);
     if (wpIndex !== null) {
@@ -423,6 +438,24 @@ function findHeadingHandleAt(canvasX, canvasY) {
 }
 
 /**
+ * Update coordinate display in toolbar
+ */
+function updateCoordinateDisplay(x, y, theta) {
+    if (coordXEl) coordXEl.value = x.toFixed(2);
+    if (coordYEl) coordYEl.value = y.toFixed(2);
+    if (coordThetaEl && theta !== null) coordThetaEl.value = theta.toFixed(0);
+}
+
+/**
+ * Highlight a waypoint in the list
+ */
+function highlightWaypoint(index) {
+    document.querySelectorAll('.waypoint-item').forEach((el, i) => {
+        el.classList.toggle('selected', i === index);
+    });
+}
+
+/**
  * Add a new waypoint
  * First and last waypoints default to stop=true, middle waypoints default to stop=false
  */
@@ -437,6 +470,7 @@ function addWaypoint(x, y, heading, stop, v_max = 3.0, omega_max = 10.0) {
     // New waypoint is added as the last, so it should stop
     state.waypoints.push({ x, y, heading, stop: true, v_max, omega_max });
     updateWaypointList();
+    updateTimelineMarkers();
     render();
 }
 
@@ -454,6 +488,7 @@ function deleteWaypoint(index) {
     }
 
     updateWaypointList();
+    updateTimelineMarkers();
     render();
 }
 
@@ -496,88 +531,95 @@ function clearWaypoints() {
     state.waypoints = [];
     state.trajectory = null;
     updateWaypointList();
+    updateTimelineMarkers();
     updatePlaybackControls();
     render();
 }
 
 /**
- * Update the waypoint list UI with editable inputs
+ * Update the waypoint list UI (Choreo-style)
  */
 function updateWaypointList() {
     waypointListEl.innerHTML = '';
 
+    if (state.waypoints.length === 0) {
+        waypointListEl.innerHTML = '<div class="empty-message">Click on canvas to add waypoints</div>';
+        return;
+    }
+
     state.waypoints.forEach((wp, i) => {
         const div = document.createElement('div');
         div.className = 'waypoint-item';
+        div.dataset.index = i;
 
-        const headingDeg = (wp.heading * 180 / Math.PI).toFixed(1);
-        const isLastWaypoint = i === state.waypoints.length - 1;
-
-        // Ensure defaults for v_max and omega_max
-        if (wp.v_max === undefined) wp.v_max = 3.0;
-        if (wp.omega_max === undefined) wp.omega_max = 10.0;
-
-        // Velocity limits row (only for non-last waypoints since they define segment limits)
-        const velocityRow = isLastWaypoint ? '' : `
-            <div class="waypoint-inputs velocity-row">
-                <div class="waypoint-input-group segment-label">Segment ${i + 1} → ${i + 2} limits:</div>
-                <div class="waypoint-input-group">
-                    <label>V max (m/s)</label>
-                    <input type="number" step="0.1" min="0.1" value="${wp.v_max.toFixed(1)}" data-index="${i}" data-field="v_max">
-                </div>
-                <div class="waypoint-input-group">
-                    <label>ω max (rad/s)</label>
-                    <input type="number" step="0.5" min="0.1" value="${wp.omega_max.toFixed(1)}" data-index="${i}" data-field="omega_max">
-                </div>
-            </div>
-        `;
+        const iconClass = wp.stop ? 'stop' : 'pass';
 
         div.innerHTML = `
-            <div class="waypoint-header">
-                <span class="index">${i + 1}</span>
-                <label class="stop-toggle">
-                    <input type="checkbox" ${wp.stop ? 'checked' : ''} data-index="${i}">
-                    Stop
-                </label>
-                <button class="delete-btn" data-index="${i}">×</button>
-            </div>
-            <div class="waypoint-inputs">
-                <div class="waypoint-input-group">
-                    <label>X (m)</label>
-                    <input type="number" step="0.01" value="${wp.x.toFixed(2)}" data-index="${i}" data-field="x">
-                </div>
-                <div class="waypoint-input-group">
-                    <label>Y (m)</label>
-                    <input type="number" step="0.01" value="${wp.y.toFixed(2)}" data-index="${i}" data-field="y">
-                </div>
-                <div class="waypoint-input-group">
-                    <label>Heading (°)</label>
-                    <input type="number" step="1" value="${headingDeg}" data-index="${i}" data-field="heading">
-                </div>
-            </div>
-            ${velocityRow}
+            <span class="waypoint-icon ${iconClass}">${wp.stop ? '+' : '\u2192'}</span>
+            <span class="waypoint-name">Pose Waypoint</span>
+            <span class="waypoint-index">${i + 1}</span>
+            <button class="icon-btn small delete-wp" title="Delete">&#x1F5D1;</button>
         `;
 
         // Event listeners
-        div.querySelector('.delete-btn').addEventListener('click', () => deleteWaypoint(i));
-        div.querySelector('input[type="checkbox"]').addEventListener('change', () => toggleWaypointStop(i));
+        div.querySelector('.delete-wp').addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteWaypoint(i);
+        });
 
-        // Input field listeners
-        div.querySelectorAll('.waypoint-input-group input[type="number"]').forEach(input => {
-            input.addEventListener('change', (e) => {
-                const idx = parseInt(e.target.dataset.index);
-                const field = e.target.dataset.field;
-                updateWaypointField(idx, field, e.target.value);
-            });
-            // Update on blur too
-            input.addEventListener('blur', (e) => {
-                const idx = parseInt(e.target.dataset.index);
-                const field = e.target.dataset.field;
-                updateWaypointField(idx, field, e.target.value);
-            });
+        div.addEventListener('click', () => {
+            highlightWaypoint(i);
+            // Center view on waypoint (optional)
+            const wp = state.waypoints[i];
+            updateCoordinateDisplay(wp.x, wp.y, wp.heading * 180 / Math.PI);
         });
 
         waypointListEl.appendChild(div);
+    });
+}
+
+/**
+ * Update timeline markers based on waypoints
+ */
+function updateTimelineMarkers() {
+    if (!timelineMarkers) return;
+
+    timelineMarkers.innerHTML = '';
+
+    if (!state.trajectory || state.waypoints.length === 0) {
+        // Just show evenly spaced markers for waypoints
+        state.waypoints.forEach((wp, i) => {
+            const marker = document.createElement('div');
+            marker.className = 'timeline-marker';
+            const percent = state.waypoints.length > 1
+                ? (i / (state.waypoints.length - 1)) * 100
+                : 50;
+            marker.style.left = `${percent}%`;
+            timelineMarkers.appendChild(marker);
+        });
+        return;
+    }
+
+    // With trajectory, place markers at actual time positions
+    const totalTime = state.trajectory.totalTime;
+    const times = state.trajectory.times;
+    const states = state.trajectory.states;
+
+    // Find times closest to waypoints
+    state.waypoints.forEach((wp, i) => {
+        const marker = document.createElement('div');
+        marker.className = 'timeline-marker';
+
+        // Estimate waypoint time based on segment
+        let wpTime = 0;
+        if (i > 0 && state.waypoints.length > 1) {
+            // Approximate - in reality we'd track actual waypoint times
+            wpTime = (i / (state.waypoints.length - 1)) * totalTime;
+        }
+
+        const percent = (wpTime / totalTime) * 100;
+        marker.style.left = `${Math.min(100, Math.max(0, percent))}%`;
+        timelineMarkers.appendChild(marker);
     });
 }
 
@@ -586,7 +628,7 @@ function updateWaypointList() {
  */
 function render() {
     // Clear canvas
-    ctx.fillStyle = '#2a2a4a';
+    ctx.fillStyle = '#1a1a28';
     ctx.fillRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
 
     // Draw background image if present
@@ -606,7 +648,7 @@ function render() {
     drawWaypoints();
 
     // Draw robot at current playback position
-    if (state.trajectory && state.isPlaying) {
+    if (state.trajectory && (state.isPlaying || state.playbackTime > 0)) {
         drawRobotAtTime(state.playbackTime);
     }
 }
@@ -660,7 +702,7 @@ function drawBackgroundImage() {
  * Draw field grid
  */
 function drawGrid() {
-    ctx.strokeStyle = '#3a3a5a';
+    ctx.strokeStyle = '#2a2a42';
     ctx.lineWidth = 1;
 
     // Calculate grid spacing (aim for ~10-20 lines)
@@ -690,7 +732,7 @@ function drawGrid() {
     }
 
     // Draw center lines
-    ctx.strokeStyle = '#4a4a6a';
+    ctx.strokeStyle = '#3a3a58';
     ctx.lineWidth = 2;
 
     // Center cross
@@ -705,10 +747,10 @@ function drawGrid() {
     ctx.stroke();
 
     // Draw axis labels
-    ctx.fillStyle = '#666';
+    ctx.fillStyle = '#505068';
     ctx.font = '12px monospace';
     ctx.fillText('0', 5, CANVAS_SIZE - 5);
-    ctx.fillText(`${FIELD_SIZE.toFixed(1)}m`, CANVAS_SIZE - 40, CANVAS_SIZE - 5);
+    ctx.fillText(`${FIELD_SIZE.toFixed(1)}m`, CANVAS_SIZE - 45, CANVAS_SIZE - 5);
     ctx.fillText(`${FIELD_SIZE.toFixed(1)}m`, 5, 15);
 }
 
@@ -719,14 +761,29 @@ function drawWaypoints() {
     state.waypoints.forEach((wp, i) => {
         const pos = fieldToCanvas(wp.x, wp.y);
 
+        // Draw connection line to next waypoint
+        if (i < state.waypoints.length - 1) {
+            const nextWp = state.waypoints[i + 1];
+            const nextPos = fieldToCanvas(nextWp.x, nextWp.y);
+
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            ctx.lineTo(nextPos.x, nextPos.y);
+            ctx.strokeStyle = 'rgba(99, 102, 241, 0.3)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+
         // Draw waypoint circle
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, WAYPOINT_RADIUS, 0, 2 * Math.PI);
 
         if (wp.stop) {
-            ctx.fillStyle = '#4fc3f7';
+            ctx.fillStyle = '#6366f1'; // Purple for stop
         } else {
-            ctx.fillStyle = '#81c784';
+            ctx.fillStyle = '#22c55e'; // Green for pass-through
         }
         ctx.fill();
 
@@ -741,14 +798,14 @@ function drawWaypoints() {
         ctx.beginPath();
         ctx.moveTo(pos.x, pos.y);
         ctx.lineTo(headingEndX, headingEndY);
-        ctx.strokeStyle = '#ff9800';
+        ctx.strokeStyle = '#f59e0b';
         ctx.lineWidth = 3;
         ctx.stroke();
 
         // Draw draggable handle at arrow tip
         ctx.beginPath();
         ctx.arc(headingEndX, headingEndY, HEADING_HANDLE_RADIUS, 0, 2 * Math.PI);
-        ctx.fillStyle = '#ff9800';
+        ctx.fillStyle = '#f59e0b';
         ctx.fill();
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -758,7 +815,7 @@ function drawWaypoints() {
         const arrowDist = HEADING_LINE_LENGTH - HEADING_HANDLE_RADIUS - 2;
         const arrowTipX = pos.x + Math.cos(-wp.heading + Math.PI / 2) * arrowDist;
         const arrowTipY = pos.y + Math.sin(-wp.heading + Math.PI / 2) * arrowDist;
-        const arrowSize = 6;
+        const arrowSize = 7;
         const arrowAngle = -wp.heading + Math.PI / 2;
 
         ctx.beginPath();
@@ -772,12 +829,12 @@ function drawWaypoints() {
             arrowTipX - arrowSize * Math.cos(arrowAngle + 0.5),
             arrowTipY - arrowSize * Math.sin(arrowAngle + 0.5)
         );
-        ctx.strokeStyle = '#ff9800';
+        ctx.strokeStyle = '#f59e0b';
         ctx.lineWidth = 2;
         ctx.stroke();
 
         // Draw index number
-        ctx.fillStyle = '#1a1a2e';
+        ctx.fillStyle = '#fff';
         ctx.font = 'bold 14px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -793,7 +850,7 @@ function drawTrajectory() {
 
     const states = state.trajectory.states;
 
-    // Draw path
+    // Draw path with gradient
     ctx.beginPath();
     const firstPos = fieldToCanvas(states[0][3], states[0][4]);
     ctx.moveTo(firstPos.x, firstPos.y);
@@ -803,14 +860,14 @@ function drawTrajectory() {
         ctx.lineTo(pos.x, pos.y);
     }
 
-    ctx.strokeStyle = '#4fc3f7';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 3;
     ctx.stroke();
 
     // Draw robot poses at intervals
-    const poseInterval = Math.max(1, Math.floor(states.length / 20));
+    const poseInterval = Math.max(1, Math.floor(states.length / 25));
     for (let i = 0; i < states.length; i += poseInterval) {
-        drawRobotPose(states[i][3], states[i][4], states[i][5], 0.3);
+        drawRobotPose(states[i][3], states[i][4], states[i][5], 0.4);
     }
 
     // Draw velocity vectors at intervals
@@ -819,12 +876,12 @@ function drawTrajectory() {
         const pos = fieldToCanvas(states[i][3], states[i][4]);
         const vx = states[i][0];
         const vy = states[i][1];
-        const velScale = 20; // pixels per m/s
+        const velScale = 25; // pixels per m/s
 
         ctx.beginPath();
         ctx.moveTo(pos.x, pos.y);
         ctx.lineTo(pos.x + vx * velScale, pos.y - vy * velScale);
-        ctx.strokeStyle = '#ff5252';
+        ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 2;
         ctx.stroke();
     }
@@ -842,14 +899,14 @@ function drawRobotPose(x, y, theta, alpha = 1.0) {
     ctx.translate(pos.x, pos.y);
     ctx.rotate(-theta + Math.PI / 2);
 
-    ctx.strokeStyle = `rgba(79, 195, 247, ${alpha})`;
+    ctx.strokeStyle = `rgba(245, 158, 11, ${alpha})`;
     ctx.lineWidth = 1;
     ctx.strokeRect(-halfW, -halfL, ROBOT_WIDTH * SCALE, ROBOT_LENGTH * SCALE);
 
     // Draw front indicator
     ctx.beginPath();
     ctx.moveTo(-halfW * 0.5, -halfL);
-    ctx.lineTo(0, -halfL - 5);
+    ctx.lineTo(0, -halfL - 6);
     ctx.lineTo(halfW * 0.5, -halfL);
     ctx.stroke();
 
@@ -895,7 +952,7 @@ function drawRobotAtTime(time) {
     ctx.translate(pos.x, pos.y);
     ctx.rotate(-theta + Math.PI / 2);
 
-    ctx.fillStyle = 'rgba(79, 195, 247, 0.7)';
+    ctx.fillStyle = 'rgba(99, 102, 241, 0.8)';
     ctx.fillRect(-halfW, -halfL, ROBOT_WIDTH * SCALE, ROBOT_LENGTH * SCALE);
 
     ctx.strokeStyle = '#fff';
@@ -905,10 +962,10 @@ function drawRobotAtTime(time) {
     // Draw front indicator
     ctx.beginPath();
     ctx.moveTo(-halfW * 0.5, -halfL);
-    ctx.lineTo(0, -halfL - 8);
+    ctx.lineTo(0, -halfL - 10);
     ctx.lineTo(halfW * 0.5, -halfL);
     ctx.closePath();
-    ctx.fillStyle = '#ff9800';
+    ctx.fillStyle = '#f59e0b';
     ctx.fill();
 
     ctx.restore();
@@ -969,6 +1026,7 @@ async function solve() {
 
             showResults(result);
             updatePlaybackControls();
+            updateTimelineMarkers();
             render();
         } else {
             showStatus(`Error: ${result.detail}`, 'error');
@@ -1014,14 +1072,30 @@ function showResults(result) {
 function updatePlaybackControls() {
     const hasTrajectory = state.trajectory !== null;
     playBtn.disabled = !hasTrajectory;
-    resetBtn.disabled = !hasTrajectory;
     timeSlider.disabled = !hasTrajectory;
 
     if (hasTrajectory) {
         timeSlider.max = 1000;
         timeSlider.value = 0;
         state.playbackTime = 0;
-        timeDisplay.textContent = '0.00s';
+        timeDisplay.textContent = '0.0 s';
+        totalTimeDisplay.textContent = state.trajectory.totalTime.toFixed(1) + ' s';
+        updateTimelineProgress(0);
+    } else {
+        timeDisplay.textContent = '0.0 s';
+        totalTimeDisplay.textContent = '0.0 s';
+    }
+}
+
+/**
+ * Update timeline progress bar and scrubber
+ */
+function updateTimelineProgress(progress) {
+    if (timelineProgress) {
+        timelineProgress.style.width = `${progress * 100}%`;
+    }
+    if (timelineScrubber) {
+        timelineScrubber.style.left = `${progress * 100}%`;
     }
 }
 
@@ -1037,7 +1111,8 @@ function togglePlayback() {
         if (state.trajectory && state.playbackTime >= state.trajectory.totalTime) {
             state.playbackTime = 0;
             timeSlider.value = 0;
-            timeDisplay.textContent = '0.00s';
+            timeDisplay.textContent = '0.0 s';
+            updateTimelineProgress(0);
         }
         startPlayback();
     }
@@ -1050,7 +1125,13 @@ function startPlayback() {
     if (!state.trajectory) return;
 
     state.isPlaying = true;
-    playBtn.textContent = 'Pause';
+    playBtn.classList.add('playing');
+    playBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+            <rect x="2" y="2" width="4" height="10"/>
+            <rect x="8" y="2" width="4" height="10"/>
+        </svg>
+    `;
 
     const totalTime = state.trajectory.totalTime;
     const startRealTime = performance.now();
@@ -1070,7 +1151,8 @@ function startPlayback() {
         // Update slider and display
         const progress = state.playbackTime / totalTime;
         timeSlider.value = Math.round(progress * 1000);
-        timeDisplay.textContent = state.playbackTime.toFixed(2) + 's';
+        timeDisplay.textContent = state.playbackTime.toFixed(1) + ' s';
+        updateTimelineProgress(progress);
 
         render();
 
@@ -1087,7 +1169,12 @@ function startPlayback() {
  */
 function stopPlayback() {
     state.isPlaying = false;
-    playBtn.textContent = 'Play';
+    playBtn.classList.remove('playing');
+    playBtn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+            <path d="M3 1 L3 13 L12 7 Z"/>
+        </svg>
+    `;
     if (state.animationId) {
         cancelAnimationFrame(state.animationId);
         state.animationId = null;
@@ -1102,7 +1189,8 @@ function resetPlayback() {
     stopPlayback();
     state.playbackTime = 0;
     timeSlider.value = 0;
-    timeDisplay.textContent = '0.00s';
+    timeDisplay.textContent = '0.0 s';
+    updateTimelineProgress(0);
     render();
 }
 
@@ -1114,7 +1202,8 @@ function handleSliderChange(e) {
 
     const progress = e.target.value / 1000;
     state.playbackTime = progress * state.trajectory.totalTime;
-    timeDisplay.textContent = state.playbackTime.toFixed(2) + 's';
+    timeDisplay.textContent = state.playbackTime.toFixed(1) + ' s';
+    updateTimelineProgress(progress);
 
     if (!state.isPlaying) {
         render();
