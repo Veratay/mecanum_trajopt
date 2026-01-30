@@ -37,6 +37,7 @@ class RobotParamsRequest(BaseModel):
     w_max: float = Field(100.0, description="Motor max free speed (rad/s)")
     t_max: float = Field(1.0, description="Motor max stall torque (N*m)")
     f_traction_max: float = Field(20.0, description="Max traction force per wheel (N)")
+    k_roller_viscous: float = Field(3.0, description="Viscous roller bearing friction coefficient (N·s/m)")
 
 
 class SolveRequest(BaseModel):
@@ -110,7 +111,8 @@ async def solve_trajectory(request: SolveRequest):
             ly=request.robot_params.ly,
             w_max=request.robot_params.w_max,
             t_max=request.robot_params.t_max,
-            f_traction_max=request.robot_params.f_traction_max
+            f_traction_max=request.robot_params.f_traction_max,
+            k_roller_viscous=request.robot_params.k_roller_viscous
         )
     else:
         params = RobotParams()

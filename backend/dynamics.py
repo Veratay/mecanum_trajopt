@@ -31,6 +31,7 @@ class RobotParams:
     w_max: float = 100.0         # rad/s (motor max free speed)
     t_max: float = 1.0           # N*m (motor max stall torque)
     f_traction_max: float = 20.0 # N (max traction force per wheel before slip)
+    k_roller_viscous: float = 3.0  # N·s/m - viscous roller bearing friction coefficient
 
 
 def create_dynamics_function(params: RobotParams) -> ca.Function:
@@ -120,8 +121,13 @@ def create_dynamics_function(params: RobotParams) -> ca.Function:
     # Each wheel produces force at 45 deg to wheel axis
     # For X-configuration mecanum:
     fx_robot = (f_fl + f_bl + f_br + f_fr)
-    fy_robot = (-f_fl + f_bl - f_br + f_fr)
+    fy_robot_ideal = (-f_fl + f_bl - f_br + f_fr)
     tau = (lx + ly) * (-f_fl - f_bl + f_br + f_fr)
+
+    # Apply viscous roller friction to lateral force
+    # When strafing, rollers must spin, causing velocity-proportional friction losses
+    # Friction force opposes motion: F_friction = -k_viscous × vy_robot
+    fy_robot = fy_robot_ideal - params.k_roller_viscous * vy_robot
 
     # Accelerations in robot frame
     ax_robot = fx_robot / m
