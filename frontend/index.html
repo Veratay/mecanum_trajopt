@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mecanum Trajectory Optimizer</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Mecanum Trajectory Optimizer</h1>
+            <p class="subtitle">Click to place waypoints, drag to move, drag arrow to rotate heading</p>
+        </header>
+
+        <div class="main-content">
+            <div class="canvas-container">
+                <canvas id="field-canvas" width="600" height="600"></canvas>
+                <div class="canvas-overlay">
+                    <span id="mouse-pos"></span>
+                </div>
+            </div>
+
+            <div class="sidebar">
+                <section class="panel">
+                    <h2>Field Settings</h2>
+                    <div class="param-group">
+                        <label for="field-size">Field Size (m)</label>
+                        <input type="number" id="field-size" value="3.66" step="0.1" min="0.5" max="20">
+                    </div>
+                    <div class="field-background">
+                        <label>Background Image</label>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="bg-image-input" accept="image/*,.svg">
+                            <button id="bg-image-btn" class="btn btn-secondary btn-small">Choose File</button>
+                            <span id="bg-image-name">No file chosen</span>
+                        </div>
+                        <button id="clear-bg-btn" class="btn btn-secondary btn-small">Clear Background</button>
+                    </div>
+                    <div class="bg-controls" id="bg-controls" style="display: none;">
+                        <div class="param-group">
+                            <label for="bg-scale">Scale</label>
+                            <input type="range" id="bg-scale" min="0.1" max="3" step="0.01" value="1">
+                            <span id="bg-scale-value">1.00</span>
+                        </div>
+                        <div class="param-group">
+                            <label for="bg-rotation">Rotation</label>
+                            <input type="range" id="bg-rotation" min="0" max="360" step="1" value="0">
+                            <span id="bg-rotation-value">0°</span>
+                        </div>
+                        <div class="param-group">
+                            <label for="bg-opacity">Opacity</label>
+                            <input type="range" id="bg-opacity" min="0" max="1" step="0.05" value="0.5">
+                            <span id="bg-opacity-value">0.50</span>
+                        </div>
+                        <div class="mirror-controls">
+                            <label>
+                                <input type="checkbox" id="bg-mirror-h">
+                                Mirror Horizontal
+                            </label>
+                            <label>
+                                <input type="checkbox" id="bg-mirror-v">
+                                Mirror Vertical
+                            </label>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2>Waypoints</h2>
+                    <div id="waypoint-list"></div>
+                    <button id="clear-waypoints" class="btn btn-secondary">Clear All</button>
+                </section>
+
+                <section class="panel collapsible">
+                    <h2 class="panel-header" data-toggle="robot-params">Robot Parameters <span class="toggle-icon">▼</span></h2>
+                    <div id="robot-params" class="panel-content">
+                        <div class="param-group">
+                            <label for="param-mass">Mass (kg)</label>
+                            <input type="number" id="param-mass" value="15.0" step="0.1" min="1">
+                        </div>
+                        <div class="param-group">
+                            <label for="param-inertia">Inertia (kg*m²)</label>
+                            <input type="number" id="param-inertia" value="0.5" step="0.01" min="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label for="param-wheel-radius">Wheel Radius (m)</label>
+                            <input type="number" id="param-wheel-radius" value="0.05" step="0.005" min="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label for="param-lx">Wheelbase X/2 (m)</label>
+                            <input type="number" id="param-lx" value="0.15" step="0.01" min="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label for="param-ly">Wheelbase Y/2 (m)</label>
+                            <input type="number" id="param-ly" value="0.15" step="0.01" min="0.01">
+                        </div>
+                        <div class="param-group">
+                            <label for="param-wmax">Motor Max Speed (rad/s)</label>
+                            <input type="number" id="param-wmax" value="100" step="1" min="1">
+                        </div>
+                        <div class="param-group">
+                            <label for="param-tmax">Motor Max Torque (N*m)</label>
+                            <input type="number" id="param-tmax" value="1.0" step="0.1" min="0.1">
+                        </div>
+                        <div class="param-group">
+                            <label for="param-ftraction">Max Traction Force (N)</label>
+                            <input type="number" id="param-ftraction" value="20.0" step="1" min="1">
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel">
+                    <h2>Solve</h2>
+                    <button id="solve-btn" class="btn btn-primary">Solve Trajectory</button>
+                    <div id="solve-status" class="status"></div>
+                    <div id="solve-results" class="results"></div>
+                </section>
+
+                <section class="panel">
+                    <h2>Playback</h2>
+                    <div class="playback-controls">
+                        <button id="play-btn" class="btn btn-secondary" disabled>Play</button>
+                        <button id="reset-btn" class="btn btn-secondary" disabled>Reset</button>
+                    </div>
+                    <div class="playback-slider">
+                        <input type="range" id="time-slider" min="0" max="100" value="0" disabled>
+                        <span id="time-display">0.00s</span>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
