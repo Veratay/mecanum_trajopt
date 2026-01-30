@@ -112,6 +112,10 @@
 
                 <section class="panel">
                     <h2>Solve</h2>
+                    <div class="param-group">
+                        <label for="steps-per-segment">Steps per Segment</label>
+                        <input type="number" id="steps-per-segment" value="20" step="1" min="5" max="100">
+                    </div>
                     <button id="solve-btn" class="btn btn-primary">Solve Trajectory</button>
                     <div id="solve-status" class="status"></div>
                     <div id="solve-results" class="results"></div>

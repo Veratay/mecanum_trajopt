@@ -25,6 +25,7 @@ const state = {
     selectedWaypoint: null,
     isDragging: false,
     isDraggingHeading: false,
+    wasDragging: false,  // Track if a drag just occurred (to prevent click creating waypoint)
     playbackTime: 0,
     isPlaying: false,
     animationId: null,
@@ -48,6 +49,7 @@ let playBtn, resetBtn, timeSlider, timeDisplay, mousePosEl;
 let fieldSizeInput, bgImageInput, bgControls;
 let bgScaleSlider, bgRotationSlider, bgOpacitySlider;
 let bgMirrorH, bgMirrorV;
+let stepsPerSegmentInput;
 
 /**
  * Initialize the application
@@ -76,6 +78,9 @@ function init() {
     bgOpacitySlider = document.getElementById('bg-opacity');
     bgMirrorH = document.getElementById('bg-mirror-h');
     bgMirrorV = document.getElementById('bg-mirror-v');
+
+    // Solver settings
+    stepsPerSegmentInput = document.getElementById('steps-per-segment');
 
     // Canvas event listeners
     canvas.addEventListener('click', handleCanvasClick);
@@ -238,7 +243,11 @@ function handleBgSettingChange() {
  * Handle canvas click - add new waypoint
  */
 function handleCanvasClick(e) {
-    if (state.isDragging || state.isDraggingHeading) return;
+    // Don't create waypoint if we just finished dragging
+    if (state.isDragging || state.isDraggingHeading || state.wasDragging) {
+        state.wasDragging = false;
+        return;
+    }
 
     const rect = canvas.getBoundingClientRect();
     const canvasX = e.clientX - rect.left;
@@ -250,8 +259,10 @@ function handleCanvasClick(e) {
     if (clickedWp !== null || clickedHeading !== null) return;
 
     // Add new waypoint
+    // First and last waypoints should stop by default, middle ones should not
     const fieldPos = canvasToField(canvasX, canvasY);
-    addWaypoint(fieldPos.x, fieldPos.y, 0, true);
+    const isFirstWaypoint = state.waypoints.length === 0;
+    addWaypoint(fieldPos.x, fieldPos.y, 0, isFirstWaypoint);
 }
 
 /**
@@ -334,6 +345,8 @@ function handleMouseMove(e) {
  * Handle mouse up - stop dragging
  */
 function handleMouseUp() {
+    // Track if we were dragging (to prevent click from creating waypoint)
+    state.wasDragging = state.isDragging || state.isDraggingHeading;
     state.isDragging = false;
     state.isDraggingHeading = false;
     state.selectedWaypoint = null;
@@ -411,18 +424,35 @@ function findHeadingHandleAt(canvasX, canvasY) {
 
 /**
  * Add a new waypoint
+ * First and last waypoints default to stop=true, middle waypoints default to stop=false
  */
 function addWaypoint(x, y, heading, stop, v_max = 3.0, omega_max = 10.0) {
-    state.waypoints.push({ x, y, heading, stop, v_max, omega_max });
+    // If there's a previous waypoint that was the last, and it's not also the first,
+    // it should no longer stop by default (it's now a middle waypoint)
+    if (state.waypoints.length > 1) {
+        const prevLastIdx = state.waypoints.length - 1;
+        state.waypoints[prevLastIdx].stop = false;
+    }
+
+    // New waypoint is added as the last, so it should stop
+    state.waypoints.push({ x, y, heading, stop: true, v_max, omega_max });
     updateWaypointList();
     render();
 }
 
 /**
  * Delete a waypoint
+ * Updates stop flags to ensure first and last waypoints are stopped
  */
 function deleteWaypoint(index) {
     state.waypoints.splice(index, 1);
+
+    // Ensure first and last waypoints have stop=true
+    if (state.waypoints.length > 0) {
+        state.waypoints[0].stop = true;
+        state.waypoints[state.waypoints.length - 1].stop = true;
+    }
+
     updateWaypointList();
     render();
 }
@@ -914,7 +944,8 @@ async function solve() {
 
     const request = {
         waypoints: state.waypoints,
-        robot_params: getRobotParams()
+        robot_params: getRobotParams(),
+        n_per_segment: parseInt(stepsPerSegmentInput.value) || 20
     };
 
     try {
@@ -996,11 +1027,18 @@ function updatePlaybackControls() {
 
 /**
  * Toggle playback
+ * If at the end, reset to the beginning before playing
  */
 function togglePlayback() {
     if (state.isPlaying) {
         stopPlayback();
     } else {
+        // If at the end of playback, reset to beginning first
+        if (state.trajectory && state.playbackTime >= state.trajectory.totalTime) {
+            state.playbackTime = 0;
+            timeSlider.value = 0;
+            timeDisplay.textContent = '0.00s';
+        }
         startPlayback();
     }
 }
