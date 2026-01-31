@@ -32,6 +32,8 @@ class RobotParams:
     t_max: float = 1.0           # N*m (motor max stall torque)
     f_traction_max: float = 20.0 # N (max traction force per wheel before slip)
     k_roller_viscous: float = 3.0  # N·s/m - viscous roller bearing friction coefficient
+    default_intake_distance: float = 0.5  # m (default distance from intake point for intake waypoints)
+    default_intake_velocity: float = 1.0  # m/s (default max approach velocity for intake waypoints)
 
 
 def create_dynamics_function(params: RobotParams) -> ca.Function:

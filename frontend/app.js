@@ -487,14 +487,18 @@ function addWaypoint(x, y, heading, stop, v_max = 3.0, omega_max = 10.0) {
         state.waypoints[prevLastIdx].stop = false;
     }
 
+    // Get default intake parameters from robot params
+    const defaultIntakeDistance = getDefaultIntakeDistance();
+    const defaultIntakeVelocity = getDefaultIntakeVelocity();
+
     // New waypoint is added as the last, so it should stop
     state.waypoints.push({
         x, y, heading, stop: true, v_max, omega_max,
         type: 'constrained',
-        intake_x: x + 0.5,
+        intake_x: x + defaultIntakeDistance,
         intake_y: y,
-        intake_distance: 0.5,
-        intake_velocity_max: 1.0,
+        intake_distance: defaultIntakeDistance,
+        intake_velocity_max: defaultIntakeVelocity,
         intake_velocity_slack: 0.1
     });
     updateWaypointList();
@@ -593,13 +597,15 @@ function updateWaypointList() {
         const isLastWaypoint = i === state.waypoints.length - 1;
 
         // Ensure defaults for all fields
+        const defaultIntakeDist = getDefaultIntakeDistance();
+        const defaultIntakeVel = getDefaultIntakeVelocity();
         if (wp.v_max === undefined) wp.v_max = 3.0;
         if (wp.omega_max === undefined) wp.omega_max = 10.0;
         if (wp.type === undefined) wp.type = 'constrained';
-        if (wp.intake_x === undefined) wp.intake_x = wp.x + 0.5;
+        if (wp.intake_x === undefined) wp.intake_x = wp.x + defaultIntakeDist;
         if (wp.intake_y === undefined) wp.intake_y = wp.y;
-        if (wp.intake_distance === undefined) wp.intake_distance = 0.5;
-        if (wp.intake_velocity_max === undefined) wp.intake_velocity_max = 1.0;
+        if (wp.intake_distance === undefined) wp.intake_distance = defaultIntakeDist;
+        if (wp.intake_velocity_max === undefined) wp.intake_velocity_max = defaultIntakeVel;
         if (wp.intake_velocity_slack === undefined) wp.intake_velocity_slack = 0.1;
 
         // Velocity limits row (only for non-last waypoints since they define segment limits)
@@ -998,25 +1004,25 @@ function drawTrajectory() {
 
     // Draw robot poses at intervals
     const poseInterval = Math.max(1, Math.floor(states.length / 20));
-    for (let i = 0; i < states.length; i += poseInterval) {
+    for (let i = 0; i < states.length; i += 1) {
         drawRobotPose(states[i][3], states[i][4], states[i][5], 0.3);
     }
 
     // Draw velocity vectors at intervals
-    const velInterval = Math.max(1, Math.floor(states.length / 15));
-    for (let i = 0; i < states.length; i += velInterval) {
-        const pos = fieldToCanvas(states[i][3], states[i][4]);
-        const vx = states[i][0];
-        const vy = states[i][1];
-        const velScale = 20; // pixels per m/s
-
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y);
-        ctx.lineTo(pos.x + vx * velScale, pos.y - vy * velScale);
-        ctx.strokeStyle = '#666666';
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
+    // const velInterval = Math.max(1, Math.floor(states.length / 15));
+    // for (let i = 0; i < states.length; i += velInterval) {
+    //     const pos = fieldToCanvas(states[i][3], states[i][4]);
+    //     const vx = states[i][0];
+    //     const vy = states[i][1];
+    //     const velScale = 20; // pixels per m/s
+    //
+    //     ctx.beginPath();
+    //     ctx.moveTo(pos.x, pos.y);
+    //     ctx.lineTo(pos.x + vx * velScale, pos.y - vy * velScale);
+    //     ctx.strokeStyle = '#666666';
+    //     ctx.lineWidth = 2;
+    //     ctx.stroke();
+    // }
 }
 
 /**
@@ -1115,8 +1121,24 @@ function getRobotParams() {
         ly: parseFloat(document.getElementById('param-ly').value),
         w_max: parseFloat(document.getElementById('param-wmax').value),
         t_max: parseFloat(document.getElementById('param-tmax').value),
-        f_traction_max: parseFloat(document.getElementById('param-ftraction').value)
+        f_traction_max: parseFloat(document.getElementById('param-ftraction').value),
+        default_intake_distance: parseFloat(document.getElementById('param-intake-distance').value),
+        default_intake_velocity: parseFloat(document.getElementById('param-intake-velocity').value)
     };
+}
+
+/**
+ * Get default intake distance from robot params
+ */
+function getDefaultIntakeDistance() {
+    return parseFloat(document.getElementById('param-intake-distance').value) || 0.5;
+}
+
+/**
+ * Get default intake velocity from robot params
+ */
+function getDefaultIntakeVelocity() {
+    return parseFloat(document.getElementById('param-intake-velocity').value) || 1.0;
 }
 
 /**
