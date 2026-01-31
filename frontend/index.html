@@ -3,149 +3,324 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mecanum Trajectory Optimizer</title>
+    <title>Trajectory Optimizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Mecanum Trajectory Optimizer</h1>
-            <p class="subtitle">Click to place waypoints, drag to move, drag arrow to rotate heading</p>
-        </header>
+    <div class="app-container">
+        <!-- Left Panel: Trajectories & Waypoints -->
+        <aside class="panel-left">
+            <!-- Trajectory Panel -->
+            <section class="trajectory-section">
+                <div class="panel-header">
+                    <h1>Trajectories</h1>
+                    <span class="trajectory-count" id="trajectory-count">0</span>
+                    <button id="add-trajectory" class="btn-icon" title="Add Trajectory">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 5v14M5 12h14"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="trajectory-list" id="trajectory-list"></div>
+            </section>
+            <div class="panel-divider"></div>
 
-        <div class="main-content">
-            <div class="canvas-container">
-                <canvas id="field-canvas" width="600" height="600"></canvas>
-                <div class="canvas-overlay">
-                    <span id="mouse-pos"></span>
+            <!-- Waypoints Panel -->
+            <div class="panel-header">
+                <h1>Waypoints</h1>
+                <span class="waypoint-count" id="waypoint-count">0</span>
+            </div>
+            <div class="waypoint-list-container" id="waypoint-list"></div>
+            <div class="panel-footer">
+                <button id="clear-waypoints" class="btn btn-ghost btn-danger">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                    </svg>
+                    Clear All
+                </button>
+            </div>
+        </aside>
+
+        <!-- Center: Canvas Area -->
+        <main class="canvas-area">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="tool-group">
+                    <button class="tool-btn active" data-tool="select" title="Select & Move (V)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="constrained" title="Constrained Waypoint (C)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="8"/>
+                            <path d="M12 12l6 0"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="unconstrained" title="Unconstrained Waypoint (U)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="8" stroke-dasharray="4 2"/>
+                        </svg>
+                    </button>
+                    <button class="tool-btn" data-tool="intake" title="Intake Waypoint (I)">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M6 6l12 12M18 6L6 18"/>
+                            <circle cx="12" cy="12" r="8" stroke-dasharray="4 2"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="toolbar-divider"></div>
+                <button id="solve-btn" class="btn btn-solve">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Solve
+                </button>
+                <div class="solve-status-inline" id="solve-status-inline"></div>
+            </div>
+
+            <!-- Canvas Container -->
+            <div class="canvas-wrapper">
+                <div class="canvas-container" id="canvas-container">
+                    <canvas id="field-canvas"></canvas>
+                    <div class="canvas-overlay">
+                        <span id="mouse-pos">0.00, 0.00</span>
+                    </div>
+                    <div class="zoom-controls">
+                        <button class="zoom-btn" id="zoom-in" title="Zoom In">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M11 8v6M8 11h6"/>
+                            </svg>
+                        </button>
+                        <button class="zoom-btn" id="zoom-out" title="Zoom Out">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35M8 11h6"/>
+                            </svg>
+                        </button>
+                        <button class="zoom-btn" id="zoom-fit" title="Fit to View">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div class="sidebar">
-                <section class="panel">
-                    <h2>Field Settings</h2>
-                    <div class="param-group">
-                        <label for="field-size">Field Size (m)</label>
-                        <input type="number" id="field-size" value="3.66" step="0.1" min="0.5" max="20">
+            <!-- Playback Strip -->
+            <div class="playback-strip">
+                <button id="play-btn" class="playback-btn" disabled title="Play/Pause (Space)">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                </button>
+                <button id="chain-play-btn" class="playback-btn" disabled title="Play Full Chain">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <polygon points="3 3 13 12 3 21 3 3"/>
+                        <polygon points="13 3 23 12 13 21 13 3"/>
+                    </svg>
+                </button>
+                <button id="reset-btn" class="playback-btn" disabled title="Reset">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8"/>
+                        <path d="M3 3v5h5"/>
+                    </svg>
+                </button>
+                <div class="playback-track">
+                    <input type="range" id="time-slider" min="0" max="1000" value="0" disabled>
+                    <div class="playback-progress" id="playback-progress"></div>
+                </div>
+                <span id="time-display" class="time-display">0.00s</span>
+            </div>
+        </main>
+
+        <!-- Right Panel: Settings -->
+        <aside class="panel-right">
+            <!-- Field Settings -->
+            <section class="settings-section">
+                <div class="section-header" data-collapse="field-settings">
+                    <h2>Field</h2>
+                    <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="section-content" id="field-settings">
+                    <div class="input-row">
+                        <label>Size</label>
+                        <div class="input-with-unit">
+                            <input type="number" id="field-size" value="3.66" step="0.1" min="0.5" max="20">
+                            <span class="unit">m</span>
+                        </div>
                     </div>
-                    <div class="field-background">
-                        <label>Background Image</label>
-                        <div class="file-input-wrapper">
+                    <div class="input-row">
+                        <label>Background</label>
+                        <div class="file-input-group">
                             <input type="file" id="bg-image-input" accept="image/*,.svg">
-                            <button id="bg-image-btn" class="btn btn-secondary btn-small">Choose File</button>
-                            <span id="bg-image-name">No file chosen</span>
+                            <button id="bg-image-btn" class="btn btn-small btn-secondary">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                                    <polyline points="21 15 16 10 5 21"/>
+                                </svg>
+                                Choose
+                            </button>
+                            <button id="clear-bg-btn" class="btn btn-small btn-ghost" title="Clear">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                                </svg>
+                            </button>
                         </div>
-                        <button id="clear-bg-btn" class="btn btn-secondary btn-small">Clear Background</button>
                     </div>
-                    <div class="bg-controls" id="bg-controls" style="display: none;">
-                        <div class="param-group">
-                            <label for="bg-scale">Scale</label>
+                    <div id="bg-controls" class="bg-controls" style="display: none;">
+                        <div class="slider-row">
+                            <label>Scale</label>
                             <input type="range" id="bg-scale" min="0.1" max="3" step="0.01" value="1">
-                            <span id="bg-scale-value">1.00</span>
+                            <span id="bg-scale-value" class="slider-value">1.00</span>
                         </div>
-                        <div class="param-group">
-                            <label for="bg-rotation">Rotation</label>
-                            <input type="range" id="bg-rotation" min="0" max="360" step="1" value="0">
-                            <span id="bg-rotation-value">0°</span>
+                        <div class="slider-row">
+                            <label>Rotation</label>
+                            <input type="range" id="bg-rotation" min="0" max="270" step="90" value="0">
+                            <span id="bg-rotation-value" class="slider-value">0°</span>
                         </div>
-                        <div class="param-group">
-                            <label for="bg-opacity">Opacity</label>
+                        <div class="slider-row">
+                            <label>Opacity</label>
                             <input type="range" id="bg-opacity" min="0" max="1" step="0.05" value="0.5">
-                            <span id="bg-opacity-value">0.50</span>
+                            <span id="bg-opacity-value" class="slider-value">0.50</span>
                         </div>
-                        <div class="mirror-controls">
-                            <label>
+                        <div class="checkbox-row">
+                            <label class="checkbox-label">
                                 <input type="checkbox" id="bg-mirror-h">
-                                Mirror Horizontal
+                                <span>Mirror H</span>
                             </label>
-                            <label>
+                            <label class="checkbox-label">
                                 <input type="checkbox" id="bg-mirror-v">
-                                Mirror Vertical
+                                <span>Mirror V</span>
                             </label>
                         </div>
                     </div>
-                </section>
+                </div>
+            </section>
 
-                <section class="panel">
-                    <h2>Waypoints</h2>
-                    <div id="waypoint-list"></div>
-                    <button id="clear-waypoints" class="btn btn-secondary">Clear All</button>
-                </section>
-
-                <section class="panel collapsible">
-                    <h2 class="panel-header" data-toggle="robot-params">Robot Parameters <span class="toggle-icon">▼</span></h2>
-                    <div id="robot-params" class="panel-content">
-                        <div class="param-group">
-                            <label for="param-mass">Mass (kg)</label>
-                            <input type="number" id="param-mass" value="15.0" step="0.1" min="1">
+            <!-- Robot Parameters -->
+            <section class="settings-section collapsed">
+                <div class="section-header" data-collapse="robot-params">
+                    <h2>Robot</h2>
+                    <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="section-content" id="robot-params">
+                    <div class="param-grid">
+                        <div class="input-row compact">
+                            <label>Mass</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-mass" value="15.0" step="0.1" min="1">
+                                <span class="unit">kg</span>
+                            </div>
                         </div>
-                        <div class="param-group">
-                            <label for="param-inertia">Inertia (kg*m²)</label>
-                            <input type="number" id="param-inertia" value="0.5" step="0.01" min="0.01">
+                        <div class="input-row compact">
+                            <label>Inertia</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-inertia" value="0.5" step="0.01" min="0.01">
+                                <span class="unit">kg·m²</span>
+                            </div>
                         </div>
-                        <div class="param-group">
-                            <label for="param-wheel-radius">Wheel Radius (m)</label>
-                            <input type="number" id="param-wheel-radius" value="0.05" step="0.005" min="0.01">
+                        <div class="input-row compact">
+                            <label>Wheel R</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-wheel-radius" value="0.05" step="0.005" min="0.01">
+                                <span class="unit">m</span>
+                            </div>
                         </div>
-                        <div class="param-group">
-                            <label for="param-lx">Wheelbase X/2 (m)</label>
-                            <input type="number" id="param-lx" value="0.15" step="0.01" min="0.01">
+                        <div class="input-row compact">
+                            <label>WB X/2</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-lx" value="0.15" step="0.01" min="0.01">
+                                <span class="unit">m</span>
+                            </div>
                         </div>
-                        <div class="param-group">
-                            <label for="param-ly">Wheelbase Y/2 (m)</label>
-                            <input type="number" id="param-ly" value="0.15" step="0.01" min="0.01">
+                        <div class="input-row compact">
+                            <label>WB Y/2</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-ly" value="0.15" step="0.01" min="0.01">
+                                <span class="unit">m</span>
+                            </div>
                         </div>
-                        <div class="param-group">
-                            <label for="param-wmax">Motor Max Speed (rad/s)</label>
-                            <input type="number" id="param-wmax" value="100" step="1" min="1">
+                        <div class="input-row compact">
+                            <label>ω max</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-wmax" value="100" step="1" min="1">
+                                <span class="unit">rad/s</span>
+                            </div>
                         </div>
-                        <div class="param-group">
-                            <label for="param-tmax">Motor Max Torque (N*m)</label>
-                            <input type="number" id="param-tmax" value="1.0" step="0.1" min="0.1">
+                        <div class="input-row compact">
+                            <label>τ max</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-tmax" value="1.0" step="0.1" min="0.1">
+                                <span class="unit">N·m</span>
+                            </div>
                         </div>
-                        <div class="param-group">
-                            <label for="param-ftraction">Max Traction Force (N)</label>
-                            <input type="number" id="param-ftraction" value="20.0" step="1" min="1">
-                        </div>
-                        <div class="param-group">
-                            <label for="param-intake-distance">Default Intake Distance (m)</label>
-                            <input type="number" id="param-intake-distance" value="0.5" step="0.05" min="0.1">
-                        </div>
-                        <div class="param-group">
-                            <label for="param-intake-velocity">Default Intake Velocity (m/s)</label>
-                            <input type="number" id="param-intake-velocity" value="1.0" step="0.1" min="0.1">
+                        <div class="input-row compact">
+                            <label>F traction</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-ftraction" value="20.0" step="1" min="1">
+                                <span class="unit">N</span>
+                            </div>
                         </div>
                     </div>
-                </section>
+                    <div class="param-divider"></div>
+                    <div class="param-grid">
+                        <div class="input-row compact">
+                            <label>Intake Dist</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-intake-distance" value="0.5" step="0.05" min="0.1">
+                                <span class="unit">m</span>
+                            </div>
+                        </div>
+                        <div class="input-row compact">
+                            <label>Intake Vel</label>
+                            <div class="input-with-unit">
+                                <input type="number" id="param-intake-velocity" value="1.0" step="0.1" min="0.1">
+                                <span class="unit">m/s</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-                <section class="panel">
-                    <h2>Solve</h2>
-                    <div class="param-group">
-                        <label for="samples-per-meter">Samples/Meter</label>
+            <!-- Solver Settings (Per-Trajectory) -->
+            <section class="settings-section collapsed">
+                <div class="section-header" data-collapse="solver-settings">
+                    <h2>Solver <span class="section-scope">(per trajectory)</span></h2>
+                    <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="section-content" id="solver-settings">
+                    <div class="input-row">
+                        <label>Samples/m</label>
                         <input type="number" id="samples-per-meter" value="20" step="1" min="1" max="100">
                     </div>
-                    <div class="param-group">
-                        <label for="min-samples-per-segment">Min Samples/Segment</label>
+                    <div class="input-row">
+                        <label>Min samples/seg</label>
                         <input type="number" id="min-samples-per-segment" value="3" step="1" min="1" max="50">
                     </div>
-                    <button id="solve-btn" class="btn btn-primary">Solve Trajectory</button>
-                    <div id="solve-status" class="status"></div>
-                    <div id="solve-results" class="results"></div>
-                </section>
+                </div>
+            </section>
 
-                <section class="panel">
-                    <h2>Playback</h2>
-                    <div class="playback-controls">
-                        <button id="play-btn" class="btn btn-secondary" disabled>Play</button>
-                        <button id="reset-btn" class="btn btn-secondary" disabled>Reset</button>
-                    </div>
-                    <div class="playback-slider">
-                        <input type="range" id="time-slider" min="0" max="100" value="0" disabled>
-                        <span id="time-display">0.00s</span>
-                    </div>
-                </section>
-            </div>
-        </div>
+            <!-- Results -->
+            <section class="settings-section results-section" id="results-section" style="display: none;">
+                <div class="section-header">
+                    <h2>Results</h2>
+                </div>
+                <div class="section-content">
+                    <div id="solve-status" class="solve-status"></div>
+                    <div id="solve-results" class="solve-results"></div>
+                </div>
+            </section>
+        </aside>
     </div>
 
     <script src="/static/app.js"></script>
