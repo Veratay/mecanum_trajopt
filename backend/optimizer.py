@@ -49,16 +49,18 @@ class SolverResult:
 class TrajectoryOptimizer:
     """Time-optimal trajectory optimizer for mecanum robots."""
 
-    def __init__(self, params: RobotParams, n_per_segment: int = 20):
+    def __init__(self, params: RobotParams, samples_per_meter: float = 20.0, min_samples_per_segment: int = 3):
         """
         Initialize the optimizer.
 
         Args:
             params: Robot physical parameters
-            n_per_segment: Number of collocation points per waypoint segment
+            samples_per_meter: Target number of samples per meter of distance (default 20 = 1 per 5cm)
+            min_samples_per_segment: Minimum number of samples between two waypoints (default 3)
         """
         self.params = params
-        self.n_per_segment = n_per_segment
+        self.samples_per_meter = samples_per_meter
+        self.min_samples_per_segment = min_samples_per_segment
 
         # Create dynamics functions
         self.f_dynamics = create_dynamics_function(params)
@@ -68,6 +70,45 @@ class TrajectoryOptimizer:
         # Solver options
         self.dt_min = 0.01  # minimum segment time (s)
         self.dt_max = 1.0   # maximum segment time (s)
+
+    def _compute_effective_positions(self, waypoints: list[Waypoint]) -> list[tuple[float, float, float]]:
+        """Compute effective positions for waypoints (handles intake waypoints specially)."""
+        effective_positions = []
+        for i, wp in enumerate(waypoints):
+            if wp.type == "intake":
+                # For intake waypoint, place robot behind intake point relative to travel direction
+                if i > 0:
+                    prev_x = effective_positions[i - 1][0]
+                    prev_y = effective_positions[i - 1][1]
+                    dx = wp.intake_x - prev_x
+                    dy = wp.intake_y - prev_y
+                    dist = np.sqrt(dx * dx + dy * dy)
+                    if dist > 1e-6:
+                        eff_x = wp.intake_x - (dx / dist) * wp.intake_distance
+                        eff_y = wp.intake_y - (dy / dist) * wp.intake_distance
+                    else:
+                        eff_x = wp.intake_x - wp.intake_distance
+                        eff_y = wp.intake_y
+                else:
+                    eff_x = wp.intake_x - wp.intake_distance
+                    eff_y = wp.intake_y
+                eff_theta = np.arctan2(wp.intake_y - eff_y, wp.intake_x - eff_x)
+                effective_positions.append((eff_x, eff_y, eff_theta))
+            else:
+                effective_positions.append((wp.x, wp.y, wp.heading))
+        return effective_positions
+
+    def _compute_samples_per_segment(self, waypoints: list[Waypoint]) -> list[int]:
+        """Compute number of samples for each segment based on distance."""
+        effective_positions = self._compute_effective_positions(waypoints)
+        samples_per_segment = []
+        for i in range(len(waypoints) - 1):
+            x1, y1, _ = effective_positions[i]
+            x2, y2, _ = effective_positions[i + 1]
+            dist = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+            n_samples = max(self.min_samples_per_segment, int(np.ceil(dist * self.samples_per_meter)))
+            samples_per_segment.append(n_samples)
+        return samples_per_segment
 
     def solve(self, waypoints: list[Waypoint]) -> SolverResult:
         """
@@ -83,8 +124,14 @@ class TrajectoryOptimizer:
             raise ValueError("Need at least 2 waypoints")
 
         n_segments = len(waypoints) - 1
-        N = n_segments * self.n_per_segment  # total intervals
+        samples_per_segment = self._compute_samples_per_segment(waypoints)
+        N = sum(samples_per_segment)  # total intervals
         K = N + 1  # total knot points
+
+        # Compute cumulative indices for segment boundaries
+        segment_start_indices = [0]
+        for n in samples_per_segment:
+            segment_start_indices.append(segment_start_indices[-1] + n)
 
         # Create optimization problem
         opti = ca.Opti()
@@ -102,13 +149,23 @@ class TrajectoryOptimizer:
 
         # Objective: minimize total time
         # Total time = sum of (dt_per_interval * n_intervals_per_segment) for each segment
-        opti.minimize(ca.sum1(DT_seg) * self.n_per_segment)
+        total_time_expr = 0
+        for s in range(n_segments):
+            total_time_expr += DT_seg[s] * samples_per_segment[s]
+        opti.minimize(total_time_expr)
 
         # Constraints
 
+        # Helper to find segment index for a given interval/knot
+        def get_segment_index(k):
+            for s in range(n_segments):
+                if k < segment_start_indices[s + 1]:
+                    return s
+            return n_segments - 1
+
         # 1. Dynamics constraints (RK4 integration)
         for k in range(N):
-            seg_idx = k // self.n_per_segment  # which segment this interval belongs to
+            seg_idx = get_segment_index(k)
             x_next = self.f_rk4(X[:, k], U[:, k], DT_seg[seg_idx])
             opti.subject_to(X[:, k+1] == x_next)
 
@@ -134,7 +191,7 @@ class TrajectoryOptimizer:
             elif i == len(waypoints) - 1:
                 k_wp = K - 1
             else:
-                k_wp = i * self.n_per_segment
+                k_wp = segment_start_indices[i]
 
             # Constraints depend on waypoint type
             if wp.type == "constrained":
@@ -229,7 +286,7 @@ class TrajectoryOptimizer:
         # 6. Velocity bounds (per-segment limits)
         for k in range(K):
             # Determine which segment this knot belongs to
-            seg_idx = min(k // self.n_per_segment, n_segments - 1)
+            seg_idx = get_segment_index(k) if k < N else n_segments - 1
             v_max = waypoints[seg_idx].v_max
             omega_max = waypoints[seg_idx].omega_max
 
@@ -238,7 +295,7 @@ class TrajectoryOptimizer:
             opti.subject_to(opti.bounded(-omega_max, X[2, k], omega_max))  # omega
 
         # Initial guess (pass unwrapped headings for consistency with constraints)
-        self._set_initial_guess(opti, X, U, DT_seg, waypoints, unwrapped_headings, K, N, n_segments)
+        self._set_initial_guess(opti, X, U, DT_seg, waypoints, unwrapped_headings, K, N, n_segments, samples_per_segment, segment_start_indices)
 
         # Configure solver - use IPOPT (reliable, always available)
         opti.solver('ipopt', {
@@ -272,10 +329,10 @@ class TrajectoryOptimizer:
         DT_seg_opt = sol.value(DT_seg)
 
         # Compute cumulative times
-        # Each segment has n_per_segment intervals, all with the same dt
+        # Each segment has variable intervals, all with the same dt within a segment
         times = [0.0]
         for k in range(N):
-            seg_idx = k // self.n_per_segment
+            seg_idx = get_segment_index(k)
             dt = float(DT_seg_opt[seg_idx]) if hasattr(DT_seg_opt, '__len__') else float(DT_seg_opt)
             times.append(times[-1] + dt)
 
@@ -309,7 +366,8 @@ class TrajectoryOptimizer:
 
     def _set_initial_guess(self, opti: ca.Opti, X: ca.MX, U: ca.MX, DT_seg: ca.MX,
                           waypoints: list[Waypoint], unwrapped_headings: list[float],
-                          K: int, N: int, n_segments: int):
+                          K: int, N: int, n_segments: int,
+                          samples_per_segment: list[int], segment_start_indices: list[int]):
         """Set initial guess using linear interpolation between waypoints."""
         # Compute effective waypoint positions (for intake waypoints, compute position on circle)
         effective_positions = []
@@ -318,7 +376,6 @@ class TrajectoryOptimizer:
                 # For intake waypoint, place robot behind intake point relative to travel direction
                 # Use previous waypoint to determine approach direction
                 if i > 0:
-                    prev_wp = waypoints[i - 1]
                     prev_x = effective_positions[i - 1][0]
                     prev_y = effective_positions[i - 1][1]
                     # Direction from prev to intake point
@@ -360,20 +417,25 @@ class TrajectoryOptimizer:
         for s in range(n_segments):
             seg_dist = segment_dists[s] if segment_dists else 1.0
             seg_time = max(seg_dist / avg_speed, 0.1)
-            dt_guess = seg_time / self.n_per_segment  # dt per interval in this segment
+            dt_guess = seg_time / samples_per_segment[s]  # dt per interval in this segment
             opti.set_initial(DT_seg[s], dt_guess)
+
+        # Helper to find segment index for a given knot
+        def get_segment_index(k):
+            for s in range(n_segments):
+                if k < segment_start_indices[s + 1]:
+                    return s
+            return n_segments - 1
 
         # Linear interpolation for states
         for k in range(K):
             # Find which segment this knot belongs to
-            progress = k / (K - 1) if K > 1 else 0
-            seg_idx = int(progress * (len(waypoints) - 1))
-            seg_idx = min(seg_idx, len(waypoints) - 2)
+            seg_idx = get_segment_index(k) if k < N else n_segments - 1
 
             # Local progress within segment
-            seg_start = seg_idx / (len(waypoints) - 1) if len(waypoints) > 1 else 0
-            seg_end = (seg_idx + 1) / (len(waypoints) - 1) if len(waypoints) > 1 else 1
-            local_progress = (progress - seg_start) / (seg_end - seg_start) if seg_end > seg_start else 0
+            seg_start_k = segment_start_indices[seg_idx]
+            seg_end_k = segment_start_indices[seg_idx + 1]
+            local_progress = (k - seg_start_k) / (seg_end_k - seg_start_k) if seg_end_k > seg_start_k else 0
 
             x1, y1, theta1 = effective_positions[seg_idx]
             x2, y2, theta2 = effective_positions[seg_idx + 1]
@@ -411,7 +473,7 @@ class TrajectoryOptimizer:
         for k in range(N):
             opti.set_initial(U[:, k], ca.DM.zeros(3))
 
-    def _compute_constraint_counts(self, waypoints: list[Waypoint], K: int, N: int) -> list[int]:
+    def _compute_constraint_counts(self, waypoints: list[Waypoint], K: int, N: int, segment_start_indices: list[int]) -> list[int]:
         """
         Compute the number of path constraints at each knot for Fatrop structure.
         This is needed for manual structure detection.
@@ -434,7 +496,7 @@ class TrajectoryOptimizer:
                 elif i == len(waypoints) - 1 and k == K - 1:
                     is_waypoint = True
                     wp_idx = i
-                elif i > 0 and i < len(waypoints) - 1 and k == i * self.n_per_segment:
+                elif i > 0 and i < len(waypoints) - 1 and k == segment_start_indices[i]:
                     is_waypoint = True
                     wp_idx = i
 
@@ -458,7 +520,7 @@ class TrajectoryOptimizer:
 def test_optimizer():
     """Simple test of the optimizer."""
     params = RobotParams()
-    optimizer = TrajectoryOptimizer(params, n_per_segment=10)
+    optimizer = TrajectoryOptimizer(params, samples_per_meter=20.0, min_samples_per_segment=3)
 
     waypoints = [
         Waypoint(x=0.0, y=0.0, heading=0.0, stop=True),

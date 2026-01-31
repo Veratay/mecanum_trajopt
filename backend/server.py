@@ -49,7 +49,8 @@ class RobotParamsRequest(BaseModel):
 class SolveRequest(BaseModel):
     waypoints: list[WaypointRequest] = Field(..., min_length=2)
     robot_params: Optional[RobotParamsRequest] = None
-    n_per_segment: int = Field(20, ge=5, le=100, description="Number of collocation points per waypoint segment")
+    samples_per_meter: float = Field(20.0, ge=1.0, le=100.0, description="Target samples per meter (default 20 = 1 per 5cm)")
+    min_samples_per_segment: int = Field(3, ge=1, le=50, description="Minimum samples between waypoints")
 
 
 class SolverStatsResponse(BaseModel):
@@ -132,7 +133,7 @@ async def solve_trajectory(request: SolveRequest):
     ]
 
     # Create optimizer and solve
-    optimizer = TrajectoryOptimizer(params, n_per_segment=request.n_per_segment)
+    optimizer = TrajectoryOptimizer(params, samples_per_meter=request.samples_per_meter, min_samples_per_segment=request.min_samples_per_segment)
 
     try:
         result = optimizer.solve(waypoints)

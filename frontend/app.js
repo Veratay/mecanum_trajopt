@@ -51,7 +51,7 @@ let playBtn, resetBtn, timeSlider, timeDisplay, mousePosEl;
 let fieldSizeInput, bgImageInput, bgControls;
 let bgScaleSlider, bgRotationSlider, bgOpacitySlider;
 let bgMirrorH, bgMirrorV;
-let stepsPerSegmentInput;
+let samplesPerMeterInput, minSamplesPerSegmentInput;
 
 /**
  * Initialize the application
@@ -82,7 +82,8 @@ function init() {
     bgMirrorV = document.getElementById('bg-mirror-v');
 
     // Solver settings
-    stepsPerSegmentInput = document.getElementById('steps-per-segment');
+    samplesPerMeterInput = document.getElementById('samples-per-meter');
+    minSamplesPerSegmentInput = document.getElementById('min-samples-per-segment');
 
     // Canvas event listeners
     canvas.addEventListener('click', handleCanvasClick);
@@ -1133,7 +1134,8 @@ async function solve() {
     const request = {
         waypoints: state.waypoints,
         robot_params: getRobotParams(),
-        n_per_segment: parseInt(stepsPerSegmentInput.value) || 20
+        samples_per_meter: parseFloat(samplesPerMeterInput.value) || 20.0,
+        min_samples_per_segment: parseInt(minSamplesPerSegmentInput.value) || 3
     };
 
     try {
