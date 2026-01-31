@@ -26,6 +26,12 @@ class WaypointRequest(BaseModel):
     stop: bool = Field(True, description="Whether robot should stop at this waypoint")
     v_max: float = Field(3.0, description="Max linear velocity for segment starting here (m/s)")
     omega_max: float = Field(10.0, description="Max angular velocity for segment starting here (rad/s)")
+    type: str = Field("constrained", description="Waypoint type: constrained, unconstrained, or intake")
+    intake_x: float = Field(0.0, description="Intake point X position (for type=intake)")
+    intake_y: float = Field(0.0, description="Intake point Y position (for type=intake)")
+    intake_distance: float = Field(0.5, description="Distance from intake point (for type=intake)")
+    intake_velocity_max: float = Field(1.0, description="Max approach velocity at intake (m/s)")
+    intake_velocity_slack: float = Field(0.1, description="Slack angle for velocity direction constraint (radians)")
 
 
 class RobotParamsRequest(BaseModel):
@@ -119,7 +125,9 @@ async def solve_trajectory(request: SolveRequest):
 
     waypoints = [
         Waypoint(x=wp.x, y=wp.y, heading=wp.heading, stop=wp.stop,
-                 v_max=wp.v_max, omega_max=wp.omega_max)
+                 v_max=wp.v_max, omega_max=wp.omega_max,
+                 type=wp.type, intake_x=wp.intake_x, intake_y=wp.intake_y,
+                 intake_distance=wp.intake_distance)
         for wp in request.waypoints
     ]
 

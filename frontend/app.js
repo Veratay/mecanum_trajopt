@@ -25,6 +25,8 @@ const state = {
     selectedWaypoint: null,
     isDragging: false,
     isDraggingHeading: false,
+    isDraggingIntakePoint: false,
+    selectedIntakeWaypoint: null,
     wasDragging: false,  // Track if a drag just occurred (to prevent click creating waypoint)
     playbackTime: 0,
     isPlaying: false,
@@ -244,7 +246,7 @@ function handleBgSettingChange() {
  */
 function handleCanvasClick(e) {
     // Don't create waypoint if we just finished dragging
-    if (state.isDragging || state.isDraggingHeading || state.wasDragging) {
+    if (state.isDragging || state.isDraggingHeading || state.isDraggingIntakePoint || state.wasDragging) {
         state.wasDragging = false;
         return;
     }
@@ -253,10 +255,11 @@ function handleCanvasClick(e) {
     const canvasX = e.clientX - rect.left;
     const canvasY = e.clientY - rect.top;
 
-    // Check if clicking on existing waypoint or heading handle
+    // Check if clicking on existing waypoint, heading handle, or intake point
     const clickedWp = findWaypointAt(canvasX, canvasY);
     const clickedHeading = findHeadingHandleAt(canvasX, canvasY);
-    if (clickedWp !== null || clickedHeading !== null) return;
+    const clickedIntake = findIntakePointAt(canvasX, canvasY);
+    if (clickedWp !== null || clickedHeading !== null || clickedIntake !== null) return;
 
     // Add new waypoint
     // First and last waypoints should stop by default, middle ones should not
@@ -266,14 +269,23 @@ function handleCanvasClick(e) {
 }
 
 /**
- * Handle mouse down - start dragging waypoint or heading
+ * Handle mouse down - start dragging waypoint, heading, or intake point
  */
 function handleMouseDown(e) {
     const rect = canvas.getBoundingClientRect();
     const canvasX = e.clientX - rect.left;
     const canvasY = e.clientY - rect.top;
 
-    // First check for heading handle (arrow tip)
+    // First check for intake point marker
+    const intakeIdx = findIntakePointAt(canvasX, canvasY);
+    if (intakeIdx !== null) {
+        state.selectedIntakeWaypoint = intakeIdx;
+        state.isDraggingIntakePoint = true;
+        canvas.style.cursor = 'move';
+        return;
+    }
+
+    // Then check for heading handle (arrow tip)
     const headingIdx = findHeadingHandleAt(canvasX, canvasY);
     if (headingIdx !== null) {
         state.selectedWaypoint = headingIdx;
@@ -292,7 +304,7 @@ function handleMouseDown(e) {
 }
 
 /**
- * Handle mouse move - drag waypoint, drag heading, or update display
+ * Handle mouse move - drag waypoint, drag heading, drag intake point, or update display
  */
 function handleMouseMove(e) {
     const rect = canvas.getBoundingClientRect();
@@ -303,7 +315,14 @@ function handleMouseMove(e) {
     const fieldPos = canvasToField(canvasX, canvasY);
     mousePosEl.textContent = `(${fieldPos.x.toFixed(2)}m, ${fieldPos.y.toFixed(2)}m)`;
 
-    if (state.isDraggingHeading && state.selectedWaypoint !== null) {
+    if (state.isDraggingIntakePoint && state.selectedIntakeWaypoint !== null) {
+        // Update intake point position
+        const wp = state.waypoints[state.selectedIntakeWaypoint];
+        wp.intake_x = fieldPos.x;
+        wp.intake_y = fieldPos.y;
+        updateWaypointList();
+        render();
+    } else if (state.isDraggingHeading && state.selectedWaypoint !== null) {
         // Update heading based on mouse position relative to waypoint
         const wp = state.waypoints[state.selectedWaypoint];
         const wpCanvas = fieldToCanvas(wp.x, wp.y);
@@ -311,8 +330,8 @@ function handleMouseMove(e) {
         const dx = canvasX - wpCanvas.x;
         const dy = canvasY - wpCanvas.y;
 
-        // Calculate angle (canvas Y is inverted, and we want 0 = up)
-        wp.heading = Math.atan2(-dx, -dy) + Math.PI;
+        // Calculate angle (heading=0 faces right/+x, canvas Y is inverted)
+        wp.heading = -Math.atan2(dy, dx);
 
         // Normalize to [-pi, pi]
         while (wp.heading > Math.PI) wp.heading -= 2 * Math.PI;
@@ -328,10 +347,13 @@ function handleMouseMove(e) {
         render();
     } else {
         // Update cursor based on hover
+        const intakeIdx = findIntakePointAt(canvasX, canvasY);
         const headingIdx = findHeadingHandleAt(canvasX, canvasY);
         const wpIndex = findWaypointAt(canvasX, canvasY);
 
-        if (headingIdx !== null) {
+        if (intakeIdx !== null) {
+            canvas.style.cursor = 'move';
+        } else if (headingIdx !== null) {
             canvas.style.cursor = 'crosshair';
         } else if (wpIndex !== null) {
             canvas.style.cursor = 'grab';
@@ -346,10 +368,12 @@ function handleMouseMove(e) {
  */
 function handleMouseUp() {
     // Track if we were dragging (to prevent click from creating waypoint)
-    state.wasDragging = state.isDragging || state.isDraggingHeading;
+    state.wasDragging = state.isDragging || state.isDraggingHeading || state.isDraggingIntakePoint;
     state.isDragging = false;
     state.isDraggingHeading = false;
+    state.isDraggingIntakePoint = false;
     state.selectedWaypoint = null;
+    state.selectedIntakeWaypoint = null;
     canvas.style.cursor = 'crosshair';
 }
 
@@ -388,6 +412,9 @@ function handleWheel(e) {
 function findWaypointAt(canvasX, canvasY) {
     for (let i = state.waypoints.length - 1; i >= 0; i--) {
         const wp = state.waypoints[i];
+        // Skip intake waypoints (their position is computed, not draggable)
+        if (wp.type === 'intake') continue;
+
         const pos = fieldToCanvas(wp.x, wp.y);
         const dx = canvasX - pos.x;
         const dy = canvasY - pos.y;
@@ -405,17 +432,42 @@ function findWaypointAt(canvasX, canvasY) {
 function findHeadingHandleAt(canvasX, canvasY) {
     for (let i = state.waypoints.length - 1; i >= 0; i--) {
         const wp = state.waypoints[i];
+        // Skip unconstrained and intake waypoints (no heading handle)
+        if (wp.type === 'unconstrained' || wp.type === 'intake') continue;
+
         const pos = fieldToCanvas(wp.x, wp.y);
 
         // Calculate heading handle position
-        const handleX = pos.x + Math.cos(-wp.heading + Math.PI / 2) * HEADING_LINE_LENGTH;
-        const handleY = pos.y + Math.sin(-wp.heading + Math.PI / 2) * HEADING_LINE_LENGTH;
+        const handleX = pos.x + Math.cos(-wp.heading) * HEADING_LINE_LENGTH;
+        const handleY = pos.y + Math.sin(-wp.heading) * HEADING_LINE_LENGTH;
 
         const dx = canvasX - handleX;
         const dy = canvasY - handleY;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist <= HEADING_HANDLE_RADIUS + 5) {
+            return i;
+        }
+    }
+    return null;
+}
+
+/**
+ * Find intake point marker at canvas position
+ */
+function findIntakePointAt(canvasX, canvasY) {
+    for (let i = state.waypoints.length - 1; i >= 0; i--) {
+        const wp = state.waypoints[i];
+        // Only intake waypoints have intake point markers
+        if (wp.type !== 'intake') continue;
+
+        const intakePos = fieldToCanvas(wp.intake_x, wp.intake_y);
+
+        const dx = canvasX - intakePos.x;
+        const dy = canvasY - intakePos.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist <= 12) {  // Slightly larger hit area for the X marker
             return i;
         }
     }
@@ -435,7 +487,15 @@ function addWaypoint(x, y, heading, stop, v_max = 3.0, omega_max = 10.0) {
     }
 
     // New waypoint is added as the last, so it should stop
-    state.waypoints.push({ x, y, heading, stop: true, v_max, omega_max });
+    state.waypoints.push({
+        x, y, heading, stop: true, v_max, omega_max,
+        type: 'constrained',
+        intake_x: x + 0.5,
+        intake_y: y,
+        intake_distance: 0.5,
+        intake_velocity_max: 1.0,
+        intake_velocity_slack: 0.1
+    });
     updateWaypointList();
     render();
 }
@@ -470,6 +530,13 @@ function toggleWaypointStop(index) {
  * Update waypoint from input field
  */
 function updateWaypointField(index, field, value) {
+    if (field === 'type') {
+        state.waypoints[index].type = value;
+        updateWaypointList();
+        render();
+        return;
+    }
+
     const numValue = parseFloat(value);
     if (isNaN(numValue)) return;
 
@@ -484,6 +551,17 @@ function updateWaypointField(index, field, value) {
         state.waypoints[index].v_max = Math.max(0.1, numValue);
     } else if (field === 'omega_max') {
         state.waypoints[index].omega_max = Math.max(0.1, numValue);
+    } else if (field === 'intake_x') {
+        state.waypoints[index].intake_x = numValue;
+    } else if (field === 'intake_y') {
+        state.waypoints[index].intake_y = numValue;
+    } else if (field === 'intake_distance') {
+        state.waypoints[index].intake_distance = Math.max(0.1, numValue);
+    } else if (field === 'intake_velocity_max') {
+        state.waypoints[index].intake_velocity_max = Math.max(0.1, numValue);
+    } else if (field === 'intake_velocity_slack') {
+        // Convert degrees to radians
+        state.waypoints[index].intake_velocity_slack = Math.max(0, Math.min(90, numValue)) * Math.PI / 180;
     }
 
     render();
@@ -513,9 +591,15 @@ function updateWaypointList() {
         const headingDeg = (wp.heading * 180 / Math.PI).toFixed(1);
         const isLastWaypoint = i === state.waypoints.length - 1;
 
-        // Ensure defaults for v_max and omega_max
+        // Ensure defaults for all fields
         if (wp.v_max === undefined) wp.v_max = 3.0;
         if (wp.omega_max === undefined) wp.omega_max = 10.0;
+        if (wp.type === undefined) wp.type = 'constrained';
+        if (wp.intake_x === undefined) wp.intake_x = wp.x + 0.5;
+        if (wp.intake_y === undefined) wp.intake_y = wp.y;
+        if (wp.intake_distance === undefined) wp.intake_distance = 0.5;
+        if (wp.intake_velocity_max === undefined) wp.intake_velocity_max = 1.0;
+        if (wp.intake_velocity_slack === undefined) wp.intake_velocity_slack = 0.1;
 
         // Velocity limits row (only for non-last waypoints since they define segment limits)
         const velocityRow = isLastWaypoint ? '' : `
@@ -532,35 +616,90 @@ function updateWaypointList() {
             </div>
         `;
 
+        // Heading input - hide for unconstrained and intake types
+        const headingInput = (wp.type === 'unconstrained' || wp.type === 'intake') ? '' : `
+            <div class="waypoint-input-group">
+                <label>Heading (°)</label>
+                <input type="number" step="1" value="${headingDeg}" data-index="${i}" data-field="heading">
+            </div>
+        `;
+
+        // Position inputs - hide for intake type (position is computed from constraints)
+        const positionInputs = wp.type === 'intake' ? '' : `
+            <div class="waypoint-input-group">
+                <label>X (m)</label>
+                <input type="number" step="0.01" value="${wp.x.toFixed(2)}" data-index="${i}" data-field="x">
+            </div>
+            <div class="waypoint-input-group">
+                <label>Y (m)</label>
+                <input type="number" step="0.01" value="${wp.y.toFixed(2)}" data-index="${i}" data-field="y">
+            </div>
+        `;
+
+        // Intake inputs - only show for intake type
+        const slackDeg = (wp.intake_velocity_slack * 180 / Math.PI).toFixed(1);
+        const intakeInputs = wp.type === 'intake' ? `
+            <div class="waypoint-inputs intake-row">
+                <div class="waypoint-input-group segment-label">Intake point:</div>
+                <div class="waypoint-input-group">
+                    <label>Intake X (m)</label>
+                    <input type="number" step="0.01" value="${wp.intake_x.toFixed(2)}" data-index="${i}" data-field="intake_x">
+                </div>
+                <div class="waypoint-input-group">
+                    <label>Intake Y (m)</label>
+                    <input type="number" step="0.01" value="${wp.intake_y.toFixed(2)}" data-index="${i}" data-field="intake_y">
+                </div>
+                <div class="waypoint-input-group">
+                    <label>Distance (m)</label>
+                    <input type="number" step="0.05" min="0.1" value="${wp.intake_distance.toFixed(2)}" data-index="${i}" data-field="intake_distance">
+                </div>
+            </div>
+            <div class="waypoint-inputs intake-row">
+                <div class="waypoint-input-group segment-label">Velocity constraints:</div>
+                <div class="waypoint-input-group">
+                    <label>Max V (m/s)</label>
+                    <input type="number" step="0.1" min="0.1" value="${wp.intake_velocity_max.toFixed(1)}" data-index="${i}" data-field="intake_velocity_max">
+                </div>
+                <div class="waypoint-input-group">
+                    <label>Slack (°)</label>
+                    <input type="number" step="1" min="0" max="90" value="${slackDeg}" data-index="${i}" data-field="intake_velocity_slack">
+                </div>
+            </div>
+        ` : '';
+
+        // Position/heading row - only show if there are inputs (not for intake waypoints)
+        const positionHeadingRow = (positionInputs || headingInput) ? `
+            <div class="waypoint-inputs">
+                ${positionInputs}
+                ${headingInput}
+            </div>
+        ` : '';
+
         div.innerHTML = `
             <div class="waypoint-header">
                 <span class="index">${i + 1}</span>
+                <select class="type-select" data-index="${i}">
+                    <option value="constrained" ${wp.type === 'constrained' ? 'selected' : ''}>Constrained</option>
+                    <option value="unconstrained" ${wp.type === 'unconstrained' ? 'selected' : ''}>Unconstrained</option>
+                    <option value="intake" ${wp.type === 'intake' ? 'selected' : ''}>Intake</option>
+                </select>
                 <label class="stop-toggle">
                     <input type="checkbox" ${wp.stop ? 'checked' : ''} data-index="${i}">
                     Stop
                 </label>
                 <button class="delete-btn" data-index="${i}">×</button>
             </div>
-            <div class="waypoint-inputs">
-                <div class="waypoint-input-group">
-                    <label>X (m)</label>
-                    <input type="number" step="0.01" value="${wp.x.toFixed(2)}" data-index="${i}" data-field="x">
-                </div>
-                <div class="waypoint-input-group">
-                    <label>Y (m)</label>
-                    <input type="number" step="0.01" value="${wp.y.toFixed(2)}" data-index="${i}" data-field="y">
-                </div>
-                <div class="waypoint-input-group">
-                    <label>Heading (°)</label>
-                    <input type="number" step="1" value="${headingDeg}" data-index="${i}" data-field="heading">
-                </div>
-            </div>
+            ${positionHeadingRow}
+            ${intakeInputs}
             ${velocityRow}
         `;
 
         // Event listeners
         div.querySelector('.delete-btn').addEventListener('click', () => deleteWaypoint(i));
         div.querySelector('input[type="checkbox"]').addEventListener('change', () => toggleWaypointStop(i));
+        div.querySelector('.type-select').addEventListener('change', (e) => {
+            updateWaypointField(i, 'type', e.target.value);
+        });
 
         // Input field listeners
         div.querySelectorAll('.waypoint-input-group input[type="number"]').forEach(input => {
@@ -606,7 +745,7 @@ function render() {
     drawWaypoints();
 
     // Draw robot at current playback position
-    if (state.trajectory && state.isPlaying) {
+    if (state.trajectory) {
         drawRobotAtTime(state.playbackTime);
     }
 }
@@ -719,65 +858,114 @@ function drawWaypoints() {
     state.waypoints.forEach((wp, i) => {
         const pos = fieldToCanvas(wp.x, wp.y);
 
-        // Draw waypoint circle
+        // Ensure defaults
+        if (wp.type === undefined) wp.type = 'constrained';
+
+        // For intake waypoints, draw only the intake point and distance circle (no waypoint circle/heading)
+        if (wp.type === 'intake') {
+            const intakePos = fieldToCanvas(wp.intake_x, wp.intake_y);
+            const distPixels = wp.intake_distance * SCALE;
+
+            // Draw dashed distance circle around intake point
+            ctx.beginPath();
+            ctx.arc(intakePos.x, intakePos.y, distPixels, 0, 2 * Math.PI);
+            ctx.setLineDash([5, 5]);
+            ctx.strokeStyle = '#888888';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw intake point marker (X shape)
+            const markerSize = 8;
+            ctx.beginPath();
+            ctx.moveTo(intakePos.x - markerSize, intakePos.y - markerSize);
+            ctx.lineTo(intakePos.x + markerSize, intakePos.y + markerSize);
+            ctx.moveTo(intakePos.x + markerSize, intakePos.y - markerSize);
+            ctx.lineTo(intakePos.x - markerSize, intakePos.y + markerSize);
+            ctx.strokeStyle = wp.stop ? '#ffffff' : '#c0c0c0';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Draw index number at intake point
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(String(i + 1), intakePos.x, intakePos.y - markerSize - 10);
+
+            // Skip drawing waypoint circle and heading for intake waypoints
+            return;
+        }
+
+        // Draw waypoint circle (not for intake waypoints)
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, WAYPOINT_RADIUS, 0, 2 * Math.PI);
 
-        if (wp.stop) {
-            ctx.fillStyle = '#4fc3f7';
+        if (wp.type === 'unconstrained') {
+            // Hollow circle for unconstrained waypoints
+            ctx.fillStyle = 'transparent';
+            ctx.strokeStyle = wp.stop ? '#ffffff' : '#c0c0c0';
+            ctx.lineWidth = 3;
+            ctx.stroke();
         } else {
-            ctx.fillStyle = '#81c784';
+            // Filled circle for constrained waypoints
+            if (wp.stop) {
+                ctx.fillStyle = '#ffffff';
+            } else {
+                ctx.fillStyle = '#c0c0c0';
+            }
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
         }
-        ctx.fill();
 
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        // Draw heading indicator line (only for constrained type, not intake or unconstrained)
+        if (wp.type === 'constrained') {
+            const headingEndX = pos.x + Math.cos(-wp.heading) * HEADING_LINE_LENGTH;
+            const headingEndY = pos.y + Math.sin(-wp.heading) * HEADING_LINE_LENGTH;
 
-        // Draw heading indicator line
-        const headingEndX = pos.x + Math.cos(-wp.heading + Math.PI / 2) * HEADING_LINE_LENGTH;
-        const headingEndY = pos.y + Math.sin(-wp.heading + Math.PI / 2) * HEADING_LINE_LENGTH;
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            ctx.lineTo(headingEndX, headingEndY);
+            ctx.strokeStyle = '#888888';
+            ctx.lineWidth = 3;
+            ctx.stroke();
 
-        ctx.beginPath();
-        ctx.moveTo(pos.x, pos.y);
-        ctx.lineTo(headingEndX, headingEndY);
-        ctx.strokeStyle = '#ff9800';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+            // Draw draggable handle at arrow tip
+            ctx.beginPath();
+            ctx.arc(headingEndX, headingEndY, HEADING_HANDLE_RADIUS, 0, 2 * Math.PI);
+            ctx.fillStyle = '#888888';
+            ctx.fill();
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
 
-        // Draw draggable handle at arrow tip
-        ctx.beginPath();
-        ctx.arc(headingEndX, headingEndY, HEADING_HANDLE_RADIUS, 0, 2 * Math.PI);
-        ctx.fillStyle = '#ff9800';
-        ctx.fill();
-        ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+            // Draw arrowhead on the line (before the handle)
+            const arrowDist = HEADING_LINE_LENGTH - HEADING_HANDLE_RADIUS - 2;
+            const arrowTipX = pos.x + Math.cos(-wp.heading) * arrowDist;
+            const arrowTipY = pos.y + Math.sin(-wp.heading) * arrowDist;
+            const arrowSize = 6;
+            const arrowAngle = -wp.heading;
 
-        // Draw arrowhead on the line (before the handle)
-        const arrowDist = HEADING_LINE_LENGTH - HEADING_HANDLE_RADIUS - 2;
-        const arrowTipX = pos.x + Math.cos(-wp.heading + Math.PI / 2) * arrowDist;
-        const arrowTipY = pos.y + Math.sin(-wp.heading + Math.PI / 2) * arrowDist;
-        const arrowSize = 6;
-        const arrowAngle = -wp.heading + Math.PI / 2;
-
-        ctx.beginPath();
-        ctx.moveTo(arrowTipX, arrowTipY);
-        ctx.lineTo(
-            arrowTipX - arrowSize * Math.cos(arrowAngle - 0.5),
-            arrowTipY - arrowSize * Math.sin(arrowAngle - 0.5)
-        );
-        ctx.moveTo(arrowTipX, arrowTipY);
-        ctx.lineTo(
-            arrowTipX - arrowSize * Math.cos(arrowAngle + 0.5),
-            arrowTipY - arrowSize * Math.sin(arrowAngle + 0.5)
-        );
-        ctx.strokeStyle = '#ff9800';
-        ctx.lineWidth = 2;
-        ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(arrowTipX, arrowTipY);
+            ctx.lineTo(
+                arrowTipX - arrowSize * Math.cos(arrowAngle - 0.5),
+                arrowTipY - arrowSize * Math.sin(arrowAngle - 0.5)
+            );
+            ctx.moveTo(arrowTipX, arrowTipY);
+            ctx.lineTo(
+                arrowTipX - arrowSize * Math.cos(arrowAngle + 0.5),
+                arrowTipY - arrowSize * Math.sin(arrowAngle + 0.5)
+            );
+            ctx.strokeStyle = '#888888';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
 
         // Draw index number
-        ctx.fillStyle = '#1a1a2e';
+        ctx.fillStyle = wp.type === 'unconstrained' ? '#ffffff' : '#1a1a2e';
         ctx.font = 'bold 14px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -803,7 +991,7 @@ function drawTrajectory() {
         ctx.lineTo(pos.x, pos.y);
     }
 
-    ctx.strokeStyle = '#4fc3f7';
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
     ctx.stroke();
 
@@ -824,7 +1012,7 @@ function drawTrajectory() {
         ctx.beginPath();
         ctx.moveTo(pos.x, pos.y);
         ctx.lineTo(pos.x + vx * velScale, pos.y - vy * velScale);
-        ctx.strokeStyle = '#ff5252';
+        ctx.strokeStyle = '#666666';
         ctx.lineWidth = 2;
         ctx.stroke();
     }
@@ -840,17 +1028,17 @@ function drawRobotPose(x, y, theta, alpha = 1.0) {
 
     ctx.save();
     ctx.translate(pos.x, pos.y);
-    ctx.rotate(-theta + Math.PI / 2);
+    ctx.rotate(-theta);  // heading=0 faces right (+x)
 
-    ctx.strokeStyle = `rgba(79, 195, 247, ${alpha})`;
+    ctx.strokeStyle = `rgba(255, 255, 255, ${alpha})`;
     ctx.lineWidth = 1;
-    ctx.strokeRect(-halfW, -halfL, ROBOT_WIDTH * SCALE, ROBOT_LENGTH * SCALE);
+    ctx.strokeRect(-halfL, -halfW, ROBOT_LENGTH * SCALE, ROBOT_WIDTH * SCALE);
 
-    // Draw front indicator
+    // Draw front indicator (on +x side, which is right when theta=0)
     ctx.beginPath();
-    ctx.moveTo(-halfW * 0.5, -halfL);
-    ctx.lineTo(0, -halfL - 5);
-    ctx.lineTo(halfW * 0.5, -halfL);
+    ctx.moveTo(halfL, -halfW * 0.5);
+    ctx.lineTo(halfL + 5, 0);
+    ctx.lineTo(halfL, halfW * 0.5);
     ctx.stroke();
 
     ctx.restore();
@@ -893,22 +1081,22 @@ function drawRobotAtTime(time) {
 
     ctx.save();
     ctx.translate(pos.x, pos.y);
-    ctx.rotate(-theta + Math.PI / 2);
+    ctx.rotate(-theta);  // heading=0 faces right (+x)
 
-    ctx.fillStyle = 'rgba(79, 195, 247, 0.7)';
-    ctx.fillRect(-halfW, -halfL, ROBOT_WIDTH * SCALE, ROBOT_LENGTH * SCALE);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.fillRect(-halfL, -halfW, ROBOT_LENGTH * SCALE, ROBOT_WIDTH * SCALE);
 
     ctx.strokeStyle = '#fff';
     ctx.lineWidth = 2;
-    ctx.strokeRect(-halfW, -halfL, ROBOT_WIDTH * SCALE, ROBOT_LENGTH * SCALE);
+    ctx.strokeRect(-halfL, -halfW, ROBOT_LENGTH * SCALE, ROBOT_WIDTH * SCALE);
 
-    // Draw front indicator
+    // Draw front indicator (on +x side, which is right when theta=0)
     ctx.beginPath();
-    ctx.moveTo(-halfW * 0.5, -halfL);
-    ctx.lineTo(0, -halfL - 8);
-    ctx.lineTo(halfW * 0.5, -halfL);
+    ctx.moveTo(halfL, -halfW * 0.5);
+    ctx.lineTo(halfL + 8, 0);
+    ctx.lineTo(halfL, halfW * 0.5);
     ctx.closePath();
-    ctx.fillStyle = '#ff9800';
+    ctx.fillStyle = '#888888';
     ctx.fill();
 
     ctx.restore();

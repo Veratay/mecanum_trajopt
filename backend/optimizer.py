@@ -26,6 +26,12 @@ class Waypoint:
     stop: bool = True  # if True, robot must have zero velocity at this waypoint
     v_max: float = 3.0  # max linear velocity for segment starting at this waypoint (m/s)
     omega_max: float = 10.0  # max angular velocity for segment starting at this waypoint (rad/s)
+    type: str = "constrained"  # "constrained", "unconstrained", "intake"
+    intake_x: float = 0.0  # Intake point X (for type="intake")
+    intake_y: float = 0.0  # Intake point Y (for type="intake")
+    intake_distance: float = 0.5  # Distance from intake point (for type="intake")
+    intake_velocity_max: float = 1.0  # Max approach velocity at intake (m/s)
+    intake_velocity_slack: float = 0.1  # Slack angle for velocity direction constraint (radians)
 
 
 @dataclass
@@ -107,6 +113,20 @@ class TrajectoryOptimizer:
             opti.subject_to(X[:, k+1] == x_next)
 
         # 2. Waypoint constraints
+        # First, unwrap waypoint headings to be continuous (avoids "long way around" issue)
+        # This ensures the optimizer doesn't try to turn 350° instead of 10°
+        unwrapped_headings = []
+        prev_heading = waypoints[0].heading
+        for wp in waypoints:
+            heading = wp.heading
+            # Unwrap: adjust heading to be within π of previous heading
+            while heading - prev_heading > np.pi:
+                heading -= 2 * np.pi
+            while heading - prev_heading < -np.pi:
+                heading += 2 * np.pi
+            unwrapped_headings.append(heading)
+            prev_heading = heading
+
         for i, wp in enumerate(waypoints):
             # Knot index for this waypoint
             if i == 0:
@@ -116,10 +136,63 @@ class TrajectoryOptimizer:
             else:
                 k_wp = i * self.n_per_segment
 
-            # Position constraints
-            opti.subject_to(X[3, k_wp] == wp.x)  # px
-            opti.subject_to(X[4, k_wp] == wp.y)  # py
-            opti.subject_to(X[5, k_wp] == wp.heading)  # theta
+            # Constraints depend on waypoint type
+            if wp.type == "constrained":
+                # Position + heading constraints
+                opti.subject_to(X[3, k_wp] == wp.x)  # px
+                opti.subject_to(X[4, k_wp] == wp.y)  # py
+                opti.subject_to(X[5, k_wp] == unwrapped_headings[i])  # theta (unwrapped)
+
+            elif wp.type == "unconstrained":
+                # Position constraints only, heading is free
+                opti.subject_to(X[3, k_wp] == wp.x)  # px
+                opti.subject_to(X[4, k_wp] == wp.y)  # py
+
+            elif wp.type == "intake":
+                # Circular constraint: robot must be at intake_distance from intake point
+                px = X[3, k_wp]
+                py = X[4, k_wp]
+                theta = X[5, k_wp]
+                vx = X[0, k_wp]
+                vy = X[1, k_wp]
+                omega = X[2, k_wp]
+
+                # Distance constraint: (px - intake_x)^2 + (py - intake_y)^2 == intake_distance^2
+                opti.subject_to(
+                    (px - wp.intake_x)**2 + (py - wp.intake_y)**2 == wp.intake_distance**2
+                )
+
+                # Heading faces intake point using sin/cos form (avoids atan2 discontinuity):
+                # sin(theta) * (intake_x - px) == cos(theta) * (intake_y - py)
+                opti.subject_to(
+                    ca.sin(theta) * (wp.intake_x - px) == ca.cos(theta) * (wp.intake_y - py)
+                )
+
+                # Plus facing-toward constraint: cos(theta)*(intake_x-px) + sin(theta)*(intake_y-py) >= 0
+                opti.subject_to(
+                    ca.cos(theta) * (wp.intake_x - px) + ca.sin(theta) * (wp.intake_y - py) >= 0
+                )
+
+                # Intake velocity constraints:
+                # 1. Angular velocity must be zero
+                opti.subject_to(omega == 0)
+
+                # 2. Velocity magnitude constraint
+                opti.subject_to(vx**2 + vy**2 <= wp.intake_velocity_max**2)
+
+                # 3. Velocity direction must face toward intake point (with slack)
+                # The velocity should be roughly in the heading direction (which faces intake)
+                # Cross product of velocity and heading gives sin of angle between them
+                # |vx*sin(theta) - vy*cos(theta)| <= |v| * sin(slack)
+                # Squared form: (vx*sin(theta) - vy*cos(theta))^2 <= (vx^2 + vy^2) * sin^2(slack)
+                sin_slack_sq = np.sin(wp.intake_velocity_slack)**2
+                cross_product = vx * ca.sin(theta) - vy * ca.cos(theta)
+                v_sq = vx**2 + vy**2
+                opti.subject_to(cross_product**2 <= v_sq * sin_slack_sq)
+
+                # 4. Velocity must be forward (toward intake), not backward
+                # Dot product of velocity and heading must be non-negative
+                opti.subject_to(vx * ca.cos(theta) + vy * ca.sin(theta) >= 0)
 
             # Velocity constraints if stop waypoint
             if wp.stop:
@@ -164,8 +237,8 @@ class TrajectoryOptimizer:
             opti.subject_to(opti.bounded(-v_max, X[1, k], v_max))  # vy
             opti.subject_to(opti.bounded(-omega_max, X[2, k], omega_max))  # omega
 
-        # Initial guess
-        self._set_initial_guess(opti, X, U, DT_seg, waypoints, K, N, n_segments)
+        # Initial guess (pass unwrapped headings for consistency with constraints)
+        self._set_initial_guess(opti, X, U, DT_seg, waypoints, unwrapped_headings, K, N, n_segments)
 
         # Configure solver - use IPOPT (reliable, always available)
         opti.solver('ipopt', {
@@ -235,13 +308,49 @@ class TrajectoryOptimizer:
         )
 
     def _set_initial_guess(self, opti: ca.Opti, X: ca.MX, U: ca.MX, DT_seg: ca.MX,
-                          waypoints: list[Waypoint], K: int, N: int, n_segments: int):
+                          waypoints: list[Waypoint], unwrapped_headings: list[float],
+                          K: int, N: int, n_segments: int):
         """Set initial guess using linear interpolation between waypoints."""
+        # Compute effective waypoint positions (for intake waypoints, compute position on circle)
+        effective_positions = []
+        for i, wp in enumerate(waypoints):
+            if wp.type == "intake":
+                # For intake waypoint, place robot behind intake point relative to travel direction
+                # Use previous waypoint to determine approach direction
+                if i > 0:
+                    prev_wp = waypoints[i - 1]
+                    prev_x = effective_positions[i - 1][0]
+                    prev_y = effective_positions[i - 1][1]
+                    # Direction from prev to intake point
+                    dx = wp.intake_x - prev_x
+                    dy = wp.intake_y - prev_y
+                    dist = np.sqrt(dx * dx + dy * dy)
+                    if dist > 1e-6:
+                        # Robot positioned behind intake point (away from approach)
+                        eff_x = wp.intake_x - (dx / dist) * wp.intake_distance
+                        eff_y = wp.intake_y - (dy / dist) * wp.intake_distance
+                    else:
+                        # Fallback: place robot to the left of intake point
+                        eff_x = wp.intake_x - wp.intake_distance
+                        eff_y = wp.intake_y
+                else:
+                    # First waypoint is intake - use default position
+                    eff_x = wp.intake_x - wp.intake_distance
+                    eff_y = wp.intake_y
+                # Heading faces intake point
+                eff_theta = np.arctan2(wp.intake_y - eff_y, wp.intake_x - eff_x)
+                effective_positions.append((eff_x, eff_y, eff_theta))
+            else:
+                # Use unwrapped heading for constrained/unconstrained waypoints
+                effective_positions.append((wp.x, wp.y, unwrapped_headings[i]))
+
         # Estimate total time based on distances per segment
         segment_dists = []
         for i in range(len(waypoints) - 1):
-            dx = waypoints[i+1].x - waypoints[i].x
-            dy = waypoints[i+1].y - waypoints[i].y
+            x1, y1, _ = effective_positions[i]
+            x2, y2, _ = effective_positions[i + 1]
+            dx = x2 - x1
+            dy = y2 - y1
             segment_dists.append(np.sqrt(dx*dx + dy*dy))
 
         avg_speed = 1.0  # m/s conservative estimate
@@ -266,33 +375,33 @@ class TrajectoryOptimizer:
             seg_end = (seg_idx + 1) / (len(waypoints) - 1) if len(waypoints) > 1 else 1
             local_progress = (progress - seg_start) / (seg_end - seg_start) if seg_end > seg_start else 0
 
-            wp1 = waypoints[seg_idx]
-            wp2 = waypoints[seg_idx + 1]
+            x1, y1, theta1 = effective_positions[seg_idx]
+            x2, y2, theta2 = effective_positions[seg_idx + 1]
 
             # Interpolate position
-            px = wp1.x + local_progress * (wp2.x - wp1.x)
-            py = wp1.y + local_progress * (wp2.y - wp1.y)
+            px = x1 + local_progress * (x2 - x1)
+            py = y1 + local_progress * (y2 - y1)
 
             # Interpolate heading (handle wrapping)
-            dtheta = wp2.heading - wp1.heading
+            dtheta = theta2 - theta1
             if dtheta > np.pi:
                 dtheta -= 2 * np.pi
             elif dtheta < -np.pi:
                 dtheta += 2 * np.pi
-            theta = wp1.heading + local_progress * dtheta
+            theta = theta1 + local_progress * dtheta
 
             # Estimate velocities from position differences
             if k < K - 1:
                 seg_dist = segment_dists[seg_idx] if seg_idx < len(segment_dists) else 1.0
                 seg_time = max(seg_dist / avg_speed, 0.1)
-                dx = (wp2.x - wp1.x) / seg_time
-                dy = (wp2.y - wp1.y) / seg_time
+                vx = (x2 - x1) / seg_time
+                vy = (y2 - y1) / seg_time
             else:
-                dx, dy = 0, 0
+                vx, vy = 0, 0
 
             # Set initial guess
-            opti.set_initial(X[0, k], dx)  # vx
-            opti.set_initial(X[1, k], dy)  # vy
+            opti.set_initial(X[0, k], vx)  # vx
+            opti.set_initial(X[1, k], vy)  # vy
             opti.set_initial(X[2, k], 0)   # omega
             opti.set_initial(X[3, k], px)  # px
             opti.set_initial(X[4, k], py)  # py
