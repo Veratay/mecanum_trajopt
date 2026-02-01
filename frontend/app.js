@@ -39,6 +39,12 @@ function createDefaultTrajectory(name = 'Trajectory 1') {
 }
 
 const state = {
+    // Project
+    projectName: 'Untitled',
+    projectFilename: null,  // null = unsaved
+    hasUnsavedChanges: false,
+    backgroundImageFilename: null,  // server-stored image reference
+
     // Field
     fieldSize: 3.66, // meters
 
@@ -114,6 +120,7 @@ function getTrajectoryIndex(id) {
 function createTrajectory() {
     const newTraj = createDefaultTrajectory(`Trajectory ${state.trajectories.length + 1}`);
     state.trajectories.push(newTraj);
+    markUnsaved();
     selectTrajectory(newTraj.id);
     updateTrajectoryList();
 }
@@ -143,6 +150,7 @@ function deleteTrajectory(id) {
         state.manuallyExpandedWaypoints.clear();
     }
 
+    markUnsaved();
     updateTrajectoryList();
     updateWaypointList();
     updateSolverSettingsFromActiveTrajectory();
@@ -154,6 +162,7 @@ function renameTrajectory(id, name) {
     const traj = getTrajectoryById(id);
     if (traj) {
         traj.name = name;
+        markUnsaved();
         updateTrajectoryList();
     }
 }
@@ -444,6 +453,11 @@ let bgScaleSlider, bgRotationSlider, bgOpacitySlider, bgMirrorH, bgMirrorV;
 let samplesPerMeterInput, minSamplesPerSegmentInput;
 let toolButtons;
 
+// Project management elements
+let openBtn, saveBtn, syncBtn, projectNameEl;
+let openModal, saveModal, syncModal;
+let projectListEl, projectNameInput, confirmSaveBtn, confirmSyncBtn, syncStatusEl;
+
 // ============================================
 // INITIALIZATION
 // ============================================
@@ -558,10 +572,59 @@ function init() {
     // Trajectory controls
     addTrajectoryBtn.addEventListener('click', createTrajectory);
 
+    // Project management
+    openBtn = document.getElementById('open-btn');
+    saveBtn = document.getElementById('save-btn');
+    syncBtn = document.getElementById('sync-btn');
+    projectNameEl = document.getElementById('project-name');
+
+    openModal = document.getElementById('open-modal');
+    saveModal = document.getElementById('save-modal');
+    syncModal = document.getElementById('sync-modal');
+
+    projectListEl = document.getElementById('project-list');
+    projectNameInput = document.getElementById('project-name-input');
+    confirmSaveBtn = document.getElementById('confirm-save-btn');
+    confirmSyncBtn = document.getElementById('confirm-sync-btn');
+    syncStatusEl = document.getElementById('sync-status');
+
+    openBtn.addEventListener('click', showOpenModal);
+    saveBtn.addEventListener('click', showSaveModal);
+    syncBtn.addEventListener('click', showSyncModal);
+    confirmSaveBtn.addEventListener('click', saveProject);
+    confirmSyncBtn.addEventListener('click', syncToAndroid);
+    document.getElementById('new-project-btn').addEventListener('click', newProject);
+
+    // Modal close buttons
+    document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const modalId = btn.dataset.modal;
+            document.getElementById(modalId).style.display = 'none';
+        });
+    });
+
+    // Close modals on backdrop click
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.style.display = 'none';
+            }
+        });
+    });
+
+    // Unsaved changes warning
+    window.addEventListener('beforeunload', (e) => {
+        if (state.hasUnsavedChanges) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+
     // Initial render
     fitToView();
     updateTrajectoryList();
     updateSolverSettingsFromActiveTrajectory();
+    updateProjectNameDisplay();
     render();
 }
 
@@ -660,7 +723,19 @@ function selectTool(tool) {
 // ============================================
 
 function handleKeyDown(e) {
-    // Don't trigger if typing in an input
+    // Handle Ctrl+S and Ctrl+O even in inputs
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        showSaveModal();
+        return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault();
+        showOpenModal();
+        return;
+    }
+
+    // Don't trigger other shortcuts if typing in an input
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
 
     const traj = getActiveTrajectory();
@@ -683,6 +758,19 @@ function handleKeyDown(e) {
             if (traj && traj.trajectory) togglePlayback();
             break;
         case 'escape':
+            // Close any open modals first
+            if (openModal.style.display !== 'none') {
+                openModal.style.display = 'none';
+                return;
+            }
+            if (saveModal.style.display !== 'none') {
+                saveModal.style.display = 'none';
+                return;
+            }
+            if (syncModal.style.display !== 'none') {
+                syncModal.style.display = 'none';
+                return;
+            }
             deselectWaypoint();
             break;
         case 'delete':
@@ -880,7 +968,14 @@ function handleMouseMove(e) {
 }
 
 function handleMouseUp() {
-    state.wasDragging = state.isDragging || state.isDraggingHeading || state.isDraggingIntakePoint || state.isPanning;
+    const wasDraggingWaypoint = state.isDragging || state.isDraggingHeading || state.isDraggingIntakePoint;
+    state.wasDragging = wasDraggingWaypoint || state.isPanning;
+
+    // Mark unsaved if we dragged a waypoint
+    if (wasDraggingWaypoint) {
+        markUnsaved();
+    }
+
     state.isDragging = false;
     state.isDraggingHeading = false;
     state.isDraggingIntakePoint = false;
@@ -922,6 +1017,7 @@ function handleWheel(e) {
             syncAllFollowers(traj.id);
         }
 
+        markUnsaved();
         updateWaypointList();
         render();
         return;
@@ -1051,6 +1147,7 @@ function addWaypoint(x, y, heading, type) {
 
     // Clear solved trajectory since waypoints changed
     traj.trajectory = null;
+    markUnsaved();
     updateTrajectoryList();
 
     const newIndex = traj.waypoints.length - 1;
@@ -1090,6 +1187,7 @@ function addIntakeWaypoint(intakeX, intakeY) {
 
     // Clear solved trajectory since waypoints changed
     traj.trajectory = null;
+    markUnsaved();
     updateTrajectoryList();
 
     const newIndex = traj.waypoints.length - 1;
@@ -1117,6 +1215,7 @@ function deleteWaypoint(index) {
 
     // Clear solved trajectory since waypoints changed
     traj.trajectory = null;
+    markUnsaved();
     updateTrajectoryList();
 
     // Update selection
@@ -1229,6 +1328,7 @@ function updateWaypointField(index, field, value) {
     }
 
     traj.trajectory = null;
+    markUnsaved();
 
     // If we changed the last waypoint's position/heading, sync any followers
     if (index === traj.waypoints.length - 1 && (field === 'x' || field === 'y' || field === 'heading')) {
@@ -1245,6 +1345,7 @@ function toggleWaypointStop(index) {
 
     traj.waypoints[index].stop = !traj.waypoints[index].stop;
     traj.trajectory = null;
+    markUnsaved();
     updateTrajectoryList();
     updateWaypointList();
     render();
@@ -1270,6 +1371,7 @@ function clearWaypoints() {
     state.selectedWaypointIndex = null;
     state.expandedWaypointIndex = null;
     state.manuallyExpandedWaypoints.clear();
+    markUnsaved();
     updateTrajectoryList();
     updateWaypointList();
     updatePlaybackControls();
@@ -1922,31 +2024,62 @@ function handleFieldSizeChange(e) {
     const newSize = parseFloat(e.target.value);
     if (newSize > 0 && newSize <= 20) {
         state.fieldSize = newSize;
+        markUnsaved();
         render();
     }
 }
 
-function handleBackgroundImageSelect(e) {
+async function handleBackgroundImageSelect(e) {
     const file = e.target.files[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
+    // Upload to server
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const response = await fetch('/images/upload', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) throw new Error('Failed to upload image');
+
+        const data = await response.json();
+        state.backgroundImageFilename = data.filename;
+
+        // Load the image from server
         const img = new Image();
         img.onload = () => {
             state.backgroundImage = img;
             bgControls.style.display = 'block';
+            markUnsaved();
             render();
         };
-        img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
+        img.src = `/images/${data.filename}`;
+    } catch (error) {
+        alert(`Error uploading image: ${error.message}`);
+        // Fallback to local display (but won't be saved with project)
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                state.backgroundImage = img;
+                bgControls.style.display = 'block';
+                render();
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
 }
 
 function clearBackgroundImage() {
     state.backgroundImage = null;
+    state.backgroundImageFilename = null;
     bgControls.style.display = 'none';
     bgImageInput.value = '';
+    markUnsaved();
     render();
 }
 
@@ -1961,6 +2094,7 @@ function handleBgSettingChange() {
     document.getElementById('bg-rotation-value').textContent = state.backgroundSettings.rotation + '°';
     document.getElementById('bg-opacity-value').textContent = state.backgroundSettings.opacity.toFixed(2);
 
+    markUnsaved();
     render();
 }
 
@@ -2346,6 +2480,356 @@ function getChainRobotStateAtTime(time) {
         theta: s0[5] + alpha * (s1[5] - s0[5]),
         trajectoryId: currentTraj.id
     };
+}
+
+// ============================================
+// PROJECT MANAGEMENT
+// ============================================
+
+function markUnsaved() {
+    state.hasUnsavedChanges = true;
+    updateProjectNameDisplay();
+}
+
+function updateProjectNameDisplay() {
+    if (projectNameEl) {
+        projectNameEl.textContent = state.projectName;
+        projectNameEl.classList.toggle('unsaved', state.hasUnsavedChanges);
+    }
+}
+
+function serializeProject() {
+    return {
+        version: 1,
+        name: state.projectName,
+        updatedAt: new Date().toISOString(),
+        fieldSize: state.fieldSize,
+        backgroundImageFilename: state.backgroundImageFilename,
+        backgroundSettings: state.backgroundSettings,
+        robotParams: getRobotParams(),
+        trajectories: state.trajectories.map(t => ({
+            id: t.id,
+            name: t.name,
+            waypoints: t.waypoints,
+            solverSettings: t.solverSettings,
+            trajectory: t.trajectory,
+            followsTrajectoryId: t.followsTrajectoryId
+        }))
+    };
+}
+
+function deserializeProject(data) {
+    // Reset state
+    state.projectName = data.name || 'Untitled';
+    state.fieldSize = data.fieldSize || 3.66;
+    state.backgroundImageFilename = data.backgroundImageFilename || null;
+
+    if (data.backgroundSettings) {
+        state.backgroundSettings = { ...state.backgroundSettings, ...data.backgroundSettings };
+        // Update UI controls
+        bgScaleSlider.value = state.backgroundSettings.scale;
+        bgRotationSlider.value = state.backgroundSettings.rotation;
+        bgOpacitySlider.value = state.backgroundSettings.opacity;
+        bgMirrorH.checked = state.backgroundSettings.mirrorH;
+        bgMirrorV.checked = state.backgroundSettings.mirrorV;
+        document.getElementById('bg-scale-value').textContent = state.backgroundSettings.scale.toFixed(2);
+        document.getElementById('bg-rotation-value').textContent = state.backgroundSettings.rotation + '°';
+        document.getElementById('bg-opacity-value').textContent = state.backgroundSettings.opacity.toFixed(2);
+    }
+
+    // Load background image if specified
+    if (state.backgroundImageFilename) {
+        const img = new Image();
+        img.onload = () => {
+            state.backgroundImage = img;
+            bgControls.style.display = 'block';
+            render();
+        };
+        img.src = `/images/${state.backgroundImageFilename}`;
+    } else {
+        state.backgroundImage = null;
+        bgControls.style.display = 'none';
+    }
+
+    // Load robot params
+    if (data.robotParams) {
+        const rp = data.robotParams;
+        document.getElementById('param-mass').value = rp.mass ?? 15.0;
+        document.getElementById('param-inertia').value = rp.inertia ?? 0.5;
+        document.getElementById('param-wheel-radius').value = rp.wheel_radius ?? 0.05;
+        document.getElementById('param-lx').value = rp.lx ?? 0.15;
+        document.getElementById('param-ly').value = rp.ly ?? 0.15;
+        document.getElementById('param-wmax').value = rp.w_max ?? 100;
+        document.getElementById('param-tmax').value = rp.t_max ?? 1.0;
+        document.getElementById('param-ftraction').value = rp.f_traction_max ?? 20.0;
+        document.getElementById('param-intake-distance').value = rp.default_intake_distance ?? 0.5;
+        document.getElementById('param-intake-velocity').value = rp.default_intake_velocity ?? 1.0;
+    }
+
+    // Load trajectories
+    if (data.trajectories && data.trajectories.length > 0) {
+        state.trajectories = data.trajectories.map(t => ({
+            id: t.id || generateId(),
+            name: t.name || 'Trajectory',
+            waypoints: t.waypoints || [],
+            solverSettings: t.solverSettings || { samplesPerMeter: 20.0, minSamplesPerSegment: 3 },
+            trajectory: t.trajectory || null,
+            followsTrajectoryId: t.followsTrajectoryId || null
+        }));
+    } else {
+        state.trajectories = [createDefaultTrajectory()];
+    }
+
+    state.activeTrajectoryId = state.trajectories[0].id;
+    state.selectedWaypointIndex = null;
+    state.expandedWaypointIndex = null;
+    state.manuallyExpandedWaypoints.clear();
+    state.expandedTrajectoryId = null;
+
+    // Update field size input
+    fieldSizeInput.value = state.fieldSize;
+
+    state.hasUnsavedChanges = false;
+    updateProjectNameDisplay();
+    updateTrajectoryList();
+    updateWaypointList();
+    updateSolverSettingsFromActiveTrajectory();
+    updatePlaybackControls();
+    render();
+}
+
+async function showOpenModal() {
+    openModal.style.display = 'flex';
+    projectListEl.innerHTML = '<div class="loading">Loading projects...</div>';
+
+    try {
+        const response = await fetch('/projects');
+        const data = await response.json();
+
+        if (data.projects.length === 0) {
+            projectListEl.innerHTML = '<div class="project-empty">No saved projects</div>';
+            return;
+        }
+
+        projectListEl.innerHTML = data.projects.map(p => {
+            const date = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '';
+            return `
+                <div class="project-item" data-filename="${p.filename}">
+                    <div class="project-item-info">
+                        <span class="project-item-name">${p.name}</span>
+                        <span class="project-item-meta">${p.trajectoryCount} trajectories · ${date}</span>
+                    </div>
+                    <button class="project-delete-btn" data-filename="${p.filename}" title="Delete">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                        </svg>
+                    </button>
+                </div>
+            `;
+        }).join('');
+
+        // Add click handlers for project items
+        projectListEl.querySelectorAll('.project-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (!e.target.closest('.project-delete-btn')) {
+                    loadProject(item.dataset.filename);
+                }
+            });
+        });
+
+        // Add delete handlers
+        projectListEl.querySelectorAll('.project-delete-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                if (confirm('Delete this project?')) {
+                    await deleteProject(btn.dataset.filename);
+                    showOpenModal(); // Refresh list
+                }
+            });
+        });
+    } catch (error) {
+        projectListEl.innerHTML = `<div class="project-error">Error loading projects: ${error.message}</div>`;
+    }
+}
+
+async function loadProject(filename) {
+    try {
+        const response = await fetch(`/projects/${filename}`);
+        if (!response.ok) throw new Error('Failed to load project');
+
+        const data = await response.json();
+        state.projectFilename = filename;
+        deserializeProject(data);
+        openModal.style.display = 'none';
+    } catch (error) {
+        alert(`Error loading project: ${error.message}`);
+    }
+}
+
+async function deleteProject(filename) {
+    try {
+        const response = await fetch(`/projects/${filename}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error('Failed to delete project');
+    } catch (error) {
+        alert(`Error deleting project: ${error.message}`);
+    }
+}
+
+function showSaveModal() {
+    projectNameInput.value = state.projectName;
+    saveModal.style.display = 'flex';
+    projectNameInput.focus();
+    projectNameInput.select();
+}
+
+async function saveProject() {
+    const name = projectNameInput.value.trim() || 'Untitled';
+    state.projectName = name;
+
+    // Generate filename from name if new project
+    if (!state.projectFilename) {
+        state.projectFilename = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '.json';
+    }
+
+    const projectData = serializeProject();
+
+    try {
+        confirmSaveBtn.disabled = true;
+        confirmSaveBtn.textContent = 'Saving...';
+
+        const response = await fetch(`/projects/${state.projectFilename}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(projectData)
+        });
+
+        if (!response.ok) throw new Error('Failed to save project');
+
+        const result = await response.json();
+        state.projectFilename = result.filename;
+        state.hasUnsavedChanges = false;
+        updateProjectNameDisplay();
+        saveModal.style.display = 'none';
+    } catch (error) {
+        alert(`Error saving project: ${error.message}`);
+    } finally {
+        confirmSaveBtn.disabled = false;
+        confirmSaveBtn.textContent = 'Save';
+    }
+}
+
+function newProject() {
+    if (state.hasUnsavedChanges) {
+        if (!confirm('You have unsaved changes. Create a new project anyway?')) {
+            return;
+        }
+    }
+
+    state.projectName = 'Untitled';
+    state.projectFilename = null;
+    state.backgroundImageFilename = null;
+    state.backgroundImage = null;
+    state.fieldSize = 3.66;
+    state.trajectories = [createDefaultTrajectory()];
+    state.activeTrajectoryId = state.trajectories[0].id;
+    state.selectedWaypointIndex = null;
+    state.expandedWaypointIndex = null;
+    state.manuallyExpandedWaypoints.clear();
+    state.hasUnsavedChanges = false;
+
+    fieldSizeInput.value = state.fieldSize;
+    bgControls.style.display = 'none';
+
+    updateProjectNameDisplay();
+    updateTrajectoryList();
+    updateWaypointList();
+    updatePlaybackControls();
+    render();
+
+    openModal.style.display = 'none';
+}
+
+async function showSyncModal() {
+    syncModal.style.display = 'flex';
+    syncStatusEl.innerHTML = '<div class="sync-checking">Checking for Android device...</div>';
+    confirmSyncBtn.disabled = true;
+
+    try {
+        const response = await fetch('/adb/status');
+        const data = await response.json();
+
+        if (data.connected) {
+            syncStatusEl.innerHTML = `
+                <div class="sync-connected">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    Device connected: ${data.device}
+                </div>
+                <p class="sync-info">Project will be synced to: <code>${'/sdcard/FIRST/trajopt/'}</code></p>
+            `;
+            confirmSyncBtn.disabled = !state.projectFilename;
+            if (!state.projectFilename) {
+                syncStatusEl.innerHTML += '<p class="sync-warning">Save the project first before syncing.</p>';
+            }
+        } else {
+            syncStatusEl.innerHTML = `
+                <div class="sync-disconnected">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="15" y1="9" x2="9" y2="15"/>
+                        <line x1="9" y1="9" x2="15" y2="15"/>
+                    </svg>
+                    No Android device connected
+                </div>
+                <p class="sync-info">Connect your phone via USB and enable USB debugging.</p>
+            `;
+        }
+    } catch (error) {
+        syncStatusEl.innerHTML = `<div class="sync-error">Error checking device: ${error.message}</div>`;
+    }
+}
+
+async function syncToAndroid() {
+    if (!state.projectFilename) {
+        alert('Please save the project first.');
+        return;
+    }
+
+    try {
+        confirmSyncBtn.disabled = true;
+        confirmSyncBtn.textContent = 'Syncing...';
+        syncStatusEl.innerHTML = '<div class="sync-checking">Pushing to device...</div>';
+
+        const response = await fetch('/adb/push', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: state.projectFilename })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            syncStatusEl.innerHTML = `
+                <div class="sync-success">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                        <polyline points="22 4 12 14.01 9 11.01"/>
+                    </svg>
+                    Successfully synced!
+                </div>
+                <p class="sync-info">File saved to: <code>${data.path}</code></p>
+            `;
+        } else {
+            throw new Error(data.detail || 'Sync failed');
+        }
+    } catch (error) {
+        syncStatusEl.innerHTML = `<div class="sync-error">Sync failed: ${error.message}</div>`;
+    } finally {
+        confirmSyncBtn.disabled = false;
+        confirmSyncBtn.textContent = 'Sync';
+    }
 }
 
 // ============================================

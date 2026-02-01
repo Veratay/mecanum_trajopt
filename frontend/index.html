@@ -80,6 +80,31 @@
                     Solve
                 </button>
                 <div class="solve-status-inline" id="solve-status-inline"></div>
+                <div class="toolbar-divider"></div>
+                <div class="project-controls">
+                    <button id="open-btn" class="btn btn-secondary" title="Open Project (Ctrl+O)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        Open
+                    </button>
+                    <button id="save-btn" class="btn btn-secondary" title="Save Project (Ctrl+S)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        Save
+                    </button>
+                    <button id="sync-btn" class="btn btn-secondary" title="Sync to Android">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                            <line x1="12" y1="18" x2="12" y2="18"/>
+                        </svg>
+                        Sync
+                    </button>
+                </div>
+                <span id="project-name" class="project-name">Untitled</span>
             </div>
 
             <!-- Canvas Container -->
@@ -321,6 +346,71 @@
                 </div>
             </section>
         </aside>
+    </div>
+
+    <!-- Open Project Modal -->
+    <div id="open-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Open Project</h3>
+                <button class="modal-close" data-modal="open-modal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="project-list" class="project-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button id="new-project-btn" class="btn btn-secondary">New Project</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Project Modal -->
+    <div id="save-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>Save Project</h3>
+                <button class="modal-close" data-modal="save-modal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="input-row">
+                    <label for="project-name-input">Project Name</label>
+                    <input type="text" id="project-name-input" placeholder="My Project">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel" data-modal="save-modal">Cancel</button>
+                <button id="confirm-save-btn" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Modal -->
+    <div id="sync-modal" class="modal" style="display: none;">
+        <div class="modal-content modal-small">
+            <div class="modal-header">
+                <h3>Sync to Android</h3>
+                <button class="modal-close" data-modal="sync-modal">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="sync-status" class="sync-status"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary modal-cancel" data-modal="sync-modal">Close</button>
+                <button id="confirm-sync-btn" class="btn btn-primary">Sync</button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>
