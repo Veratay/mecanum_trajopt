@@ -35,6 +35,19 @@ class Waypoint:
 
 
 @dataclass
+class PathConstraint:
+    """A path constraint that applies over a range of waypoints."""
+    type: str  # "circle-obstacle", "stay-in-rect", "stay-in-lane", "heading-tangent", "max-velocity", "max-omega"
+    from_waypoint: int = 0
+    to_waypoint: int = 0
+    params: dict = None  # type-specific parameters
+
+    def __post_init__(self):
+        if self.params is None:
+            self.params = {}
+
+
+@dataclass
 class SolverResult:
     """Result from the trajectory optimizer."""
     success: bool
@@ -110,18 +123,22 @@ class TrajectoryOptimizer:
             samples_per_segment.append(n_samples)
         return samples_per_segment
 
-    def solve(self, waypoints: list[Waypoint]) -> SolverResult:
+    def solve(self, waypoints: list[Waypoint], constraints: list[PathConstraint] = None) -> SolverResult:
         """
         Solve for the time-optimal trajectory through the given waypoints.
 
         Args:
             waypoints: List of waypoints (at least 2)
+            constraints: List of path constraints (optional)
 
         Returns:
             SolverResult with trajectory data
         """
         if len(waypoints) < 2:
             raise ValueError("Need at least 2 waypoints")
+
+        if constraints is None:
+            constraints = []
 
         n_segments = len(waypoints) - 1
         samples_per_segment = self._compute_samples_per_segment(waypoints)
@@ -283,16 +300,19 @@ class TrajectoryOptimizer:
         for s in range(n_segments):
             opti.subject_to(opti.bounded(self.dt_min, DT_seg[s], self.dt_max))
 
-        # 6. Velocity bounds (per-segment limits)
-        for k in range(K):
-            # Determine which segment this knot belongs to
-            seg_idx = get_segment_index(k) if k < N else n_segments - 1
-            v_max = waypoints[seg_idx].v_max
-            omega_max = waypoints[seg_idx].omega_max
+        # # 6. Velocity bounds (per-segment limits)
+        # for k in range(K):
+        #     # Determine which segment this knot belongs to
+        #     seg_idx = get_segment_index(k) if k < N else n_segments - 1
+        #     v_max = waypoints[seg_idx].v_max
+        #     omega_max = waypoints[seg_idx].omega_max
+        #
+        #     opti.subject_to(opti.bounded(-v_max, X[0, k], v_max))  # vx
+        #     opti.subject_to(opti.bounded(-v_max, X[1, k], v_max))  # vy
+        #     opti.subject_to(opti.bounded(-omega_max, X[2, k], omega_max))  # omega
 
-            opti.subject_to(opti.bounded(-v_max, X[0, k], v_max))  # vx
-            opti.subject_to(opti.bounded(-v_max, X[1, k], v_max))  # vy
-            opti.subject_to(opti.bounded(-omega_max, X[2, k], omega_max))  # omega
+        # 7. Path constraints
+        self._add_path_constraints(opti, X, K, N, waypoints, constraints, segment_start_indices, get_segment_index)
 
         # Initial guess (pass unwrapped headings for consistency with constraints)
         self._set_initial_guess(opti, X, U, DT_seg, waypoints, unwrapped_headings, K, N, n_segments, samples_per_segment, segment_start_indices)
@@ -363,6 +383,139 @@ class TrajectoryOptimizer:
             iterations=iterations,
             solve_time_ms=solve_time_ms
         )
+
+    def _add_path_constraints(self, opti: ca.Opti, X: ca.MX, K: int, N: int,
+                              waypoints: list[Waypoint], constraints: list[PathConstraint],
+                              segment_start_indices: list[int], get_segment_index):
+        """Add path constraints to the optimization problem."""
+        n_waypoints = len(waypoints)
+
+        for con in constraints:
+            # Validate waypoint range
+            from_wp = max(0, min(con.from_waypoint, n_waypoints - 1))
+            to_wp = max(0, min(con.to_waypoint, n_waypoints - 1))
+
+            # Get knot index range for this constraint
+            if from_wp == 0:
+                start_k = 0
+            else:
+                start_k = segment_start_indices[from_wp]
+
+            if to_wp >= n_waypoints - 1:
+                end_k = K - 1
+            else:
+                end_k = segment_start_indices[to_wp + 1] - 1
+
+            # Apply constraint based on type
+            if con.type == 'circle-obstacle':
+                self._add_circle_obstacle(opti, X, start_k, end_k, con.params)
+            elif con.type == 'stay-in-rect':
+                self._add_stay_in_rect(opti, X, start_k, end_k, con.params)
+            elif con.type == 'stay-in-lane':
+                self._add_stay_in_lane(opti, X, waypoints, from_wp, to_wp, start_k, end_k, con.params)
+            elif con.type == 'heading-tangent':
+                self._add_heading_tangent(opti, X, start_k, end_k, K)
+            elif con.type == 'max-velocity':
+                self._add_max_velocity(opti, X, start_k, end_k, con.params)
+            elif con.type == 'max-omega':
+                self._add_max_omega(opti, X, start_k, end_k, con.params)
+
+    def _add_circle_obstacle(self, opti: ca.Opti, X: ca.MX, start_k: int, end_k: int, params: dict):
+        """Add circular obstacle avoidance constraint."""
+        cx = params.get('cx', 0)
+        cy = params.get('cy', 0)
+        radius = params.get('radius', 0.3)
+
+        for k in range(start_k, end_k + 1):
+            px = X[3, k]
+            py = X[4, k]
+            # Robot must stay outside circle: (px-cx)^2 + (py-cy)^2 >= radius^2
+            opti.subject_to((px - cx)**2 + (py - cy)**2 >= radius**2)
+
+    def _add_stay_in_rect(self, opti: ca.Opti, X: ca.MX, start_k: int, end_k: int, params: dict):
+        """Add stay-in-rectangle constraint."""
+        x = params.get('x', 0)
+        y = params.get('y', 0)
+        width = params.get('width', 3.66)
+        height = params.get('height', 3.66)
+
+        for k in range(start_k, end_k + 1):
+            px = X[3, k]
+            py = X[4, k]
+            opti.subject_to(opti.bounded(x, px, x + width))
+            opti.subject_to(opti.bounded(y, py, y + height))
+
+    def _add_stay_in_lane(self, opti: ca.Opti, X: ca.MX, waypoints: list[Waypoint],
+                          from_wp: int, to_wp: int, start_k: int, end_k: int, params: dict):
+        """Add stay-in-lane constraint between two adjacent waypoints."""
+        lane_width = params.get('width', 0.5)
+        half_width = lane_width / 2
+
+        if to_wp <= from_wp or from_wp >= len(waypoints) - 1:
+            return
+
+        # Get waypoint positions
+        wp1 = waypoints[from_wp]
+        wp2 = waypoints[min(to_wp, len(waypoints) - 1)]
+
+        # Lane direction and perpendicular
+        dx = wp2.x - wp1.x
+        dy = wp2.y - wp1.y
+        length = np.sqrt(dx**2 + dy**2)
+
+        if length < 1e-6:
+            return
+
+        # Unit vectors
+        ux = dx / length
+        uy = dy / length
+        # Perpendicular (90 degrees counterclockwise)
+        px_dir = -uy
+        py_dir = ux
+
+        for k in range(start_k, end_k + 1):
+            rx = X[3, k]
+            ry = X[4, k]
+            # Distance from robot to lane centerline (perpendicular projection)
+            # Vector from wp1 to robot
+            vrx = rx - wp1.x
+            vry = ry - wp1.y
+            # Perpendicular distance (signed)
+            perp_dist = vrx * px_dir + vry * py_dir
+            opti.subject_to(opti.bounded(-half_width, perp_dist, half_width))
+
+    def _add_heading_tangent(self, opti: ca.Opti, X: ca.MX, start_k: int, end_k: int, K: int):
+        """Add heading-follows-tangent constraint."""
+        for k in range(start_k, end_k + 1):
+            vx = X[0, k]
+            vy = X[1, k]
+            theta = X[5, k]
+
+            # Heading should match velocity direction
+            # sin(theta) * vx = cos(theta) * vy  =>  vx * sin(theta) - vy * cos(theta) = 0
+            # But only when moving (velocity > threshold)
+            v_sq = vx**2 + vy**2
+            cross = vx * ca.sin(theta) - vy * ca.cos(theta)
+            # Normalized constraint: cross^2 <= small * v_sq (allowing some slack when nearly stopped)
+            # This is a soft constraint using slack
+            opti.subject_to(cross**2 <= 0.01 * v_sq + 1e-6)
+
+    def _add_max_velocity(self, opti: ca.Opti, X: ca.MX, start_k: int, end_k: int, params: dict):
+        """Add maximum velocity constraint over a range of knots."""
+        v_max = params.get('v_max', 1.5)
+
+        for k in range(start_k, end_k + 1):
+            vx = X[0, k]
+            vy = X[1, k]
+            opti.subject_to(vx**2 + vy**2 <= v_max**2)
+
+    def _add_max_omega(self, opti: ca.Opti, X: ca.MX, start_k: int, end_k: int, params: dict):
+        """Add maximum angular velocity constraint over a range of knots."""
+        omega_max = params.get('omega_max', 5.0)
+
+        for k in range(start_k, end_k + 1):
+            omega = X[2, k]
+            opti.subject_to(opti.bounded(-omega_max, omega, omega_max))
 
     def _set_initial_guess(self, opti: ca.Opti, X: ca.MX, U: ca.MX, DT_seg: ca.MX,
                           waypoints: list[Waypoint], unwrapped_headings: list[float],

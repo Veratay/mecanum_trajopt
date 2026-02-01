@@ -1628,3 +1628,281 @@ body {
     font-size: 12px;
     color: var(--accent-warning);
 }
+
+/* ============================================
+   CONSTRAINTS PANEL
+   ============================================ */
+
+.constraint-count {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: var(--bg-surface);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.constraint-list-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-sm);
+    max-height: 200px;
+}
+
+.constraint-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-lg);
+    text-align: center;
+    color: var(--text-tertiary);
+}
+
+.constraint-empty-icon {
+    width: 36px;
+    height: 36px;
+    margin-bottom: var(--space-sm);
+    opacity: 0.3;
+}
+
+.constraint-empty-text {
+    font-size: 11px;
+    line-height: 1.5;
+}
+
+.constraint-item {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-sm);
+    overflow: hidden;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.constraint-item:hover {
+    border-color: var(--border-default);
+}
+
+.constraint-item.selected {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.constraint-item.expanded .constraint-body {
+    display: block;
+}
+
+.constraint-header-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.constraint-header-row:hover {
+    background: var(--bg-hover);
+}
+
+.constraint-icon {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+.constraint-icon.circle-obstacle {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--accent-danger);
+}
+
+.constraint-icon.rect-obstacle {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--accent-danger);
+}
+
+.constraint-icon.stay-in-rect {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--accent-success);
+}
+
+.constraint-icon.stay-in-lane {
+    background: rgba(59, 130, 246, 0.2);
+    color: var(--accent-primary);
+}
+
+.constraint-icon.heading-tangent {
+    background: rgba(168, 85, 247, 0.2);
+    color: #a855f7;
+}
+
+.constraint-type-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.constraint-range {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-tertiary);
+    background: var(--bg-surface);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.constraint-expand-icon {
+    color: var(--text-tertiary);
+    transition: transform var(--transition-normal);
+    flex-shrink: 0;
+}
+
+.constraint-item.expanded .constraint-expand-icon {
+    transform: rotate(180deg);
+}
+
+.constraint-body {
+    display: none;
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.constraint-range-selector {
+    display: flex;
+    gap: var(--space-sm);
+    margin-bottom: var(--space-md);
+}
+
+.constraint-range-selector .input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.constraint-range-selector label {
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+}
+
+.constraint-range-selector select {
+    padding: 6px 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.constraint-range-selector select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.constraint-params {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-sm);
+}
+
+.constraint-params.triple {
+    grid-template-columns: 1fr 1fr 1fr;
+}
+
+.constraint-params.single {
+    grid-template-columns: 1fr;
+}
+
+.constraint-input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.constraint-input-group label {
+    font-size: 9px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+}
+
+.constraint-input-group input {
+    width: 100%;
+    padding: 6px 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+}
+
+.constraint-input-group input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.constraint-controls-row {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: var(--space-md);
+    padding-top: var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.constraint-delete-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.constraint-delete-btn:hover {
+    background: var(--accent-danger);
+    border-color: var(--accent-danger);
+    color: white;
+}
+
+/* Constraint tools styling in toolbar */
+.constraint-tools {
+    background: var(--bg-surface);
+}
+
+.constraint-tools .tool-btn.active {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--accent-danger);
+}
+
+.constraint-tools .tool-btn[data-tool="stay-in-rect"].active,
+.constraint-tools .tool-btn[data-tool="stay-in-lane"].active {
+    background: rgba(34, 197, 94, 0.2);
+    color: var(--accent-success);
+}
+
+.constraint-tools .tool-btn[data-tool="heading-tangent"].active {
+    background: rgba(168, 85, 247, 0.2);
+    color: #a855f7;
+}
