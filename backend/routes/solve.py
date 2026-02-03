@@ -60,7 +60,12 @@ async def solve_trajectory(request: SolveRequest):
     ]
 
     # Create optimizer and solve
-    optimizer = TrajectoryOptimizer(params, samples_per_meter=request.samples_per_meter, min_samples_per_segment=request.min_samples_per_segment)
+    optimizer = TrajectoryOptimizer(
+        params,
+        samples_per_meter=request.samples_per_meter,
+        min_samples_per_segment=request.min_samples_per_segment,
+        control_effort_weight=request.control_effort_weight
+    )
 
     try:
         result = optimizer.solve(waypoints, constraints)

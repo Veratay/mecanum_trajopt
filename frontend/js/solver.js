@@ -17,6 +17,8 @@ let solveResultsEl = null;
 let resultsSection = null;
 let samplesPerMeterInput = null;
 let minSamplesPerSegmentInput = null;
+let controlEffortWeightInput = null;
+let controlEffortWeightValue = null;
 
 export function initSolver(callbacks, elements) {
     updateTrajectoryListFn = callbacks.updateTrajectoryList;
@@ -30,6 +32,15 @@ export function initSolver(callbacks, elements) {
     resultsSection = elements.resultsSection;
     samplesPerMeterInput = elements.samplesPerMeterInput;
     minSamplesPerSegmentInput = elements.minSamplesPerSegmentInput;
+    controlEffortWeightInput = elements.controlEffortWeightInput;
+    controlEffortWeightValue = elements.controlEffortWeightValue;
+
+    // Update value display when slider changes
+    if (controlEffortWeightInput && controlEffortWeightValue) {
+        controlEffortWeightInput.addEventListener('input', () => {
+            controlEffortWeightValue.textContent = parseFloat(controlEffortWeightInput.value).toFixed(2);
+        });
+    }
 }
 
 export function getRobotParams() {
@@ -60,6 +71,9 @@ export function updateSolverSettingsFromActiveTrajectory() {
     if (traj) {
         samplesPerMeterInput.value = traj.solverSettings.samplesPerMeter;
         minSamplesPerSegmentInput.value = traj.solverSettings.minSamplesPerSegment;
+        const effortWeight = traj.solverSettings.controlEffortWeight ?? 0.0;
+        controlEffortWeightInput.value = effortWeight;
+        controlEffortWeightValue.textContent = effortWeight.toFixed(2);
     }
 }
 
@@ -78,13 +92,15 @@ export async function solve() {
     // Save solver settings from UI to trajectory
     traj.solverSettings.samplesPerMeter = parseFloat(samplesPerMeterInput.value) || 20.0;
     traj.solverSettings.minSamplesPerSegment = parseInt(minSamplesPerSegmentInput.value) || 3;
+    traj.solverSettings.controlEffortWeight = parseFloat(controlEffortWeightInput.value) || 0.0;
 
     const request = {
         waypoints: traj.waypoints,
         constraints: (traj.constraints || []).filter(c => c.enabled),
         robot_params: getRobotParams(),
         samples_per_meter: traj.solverSettings.samplesPerMeter,
-        min_samples_per_segment: traj.solverSettings.minSamplesPerSegment
+        min_samples_per_segment: traj.solverSettings.minSamplesPerSegment,
+        control_effort_weight: traj.solverSettings.controlEffortWeight
     };
 
     try {

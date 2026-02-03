@@ -62,7 +62,8 @@ class SolverResult:
 class TrajectoryOptimizer:
     """Time-optimal trajectory optimizer for mecanum robots."""
 
-    def __init__(self, params: RobotParams, samples_per_meter: float = 20.0, min_samples_per_segment: int = 3):
+    def __init__(self, params: RobotParams, samples_per_meter: float = 20.0, min_samples_per_segment: int = 3,
+                 control_effort_weight: float = 0.0):
         """
         Initialize the optimizer.
 
@@ -70,10 +71,12 @@ class TrajectoryOptimizer:
             params: Robot physical parameters
             samples_per_meter: Target number of samples per meter of distance (default 20 = 1 per 5cm)
             min_samples_per_segment: Minimum number of samples between two waypoints (default 3)
+            control_effort_weight: Weight for control effort penalty in cost function (default 0 = time-optimal)
         """
         self.params = params
         self.samples_per_meter = samples_per_meter
         self.min_samples_per_segment = min_samples_per_segment
+        self.control_effort_weight = control_effort_weight
 
         # Create dynamics functions
         self.f_dynamics = create_dynamics_function(params)
@@ -164,12 +167,18 @@ class TrajectoryOptimizer:
         # One dt per segment (shared by all intervals in that segment)
         DT_seg = opti.variable(n_segments)
 
-        # Objective: minimize total time
+        # Objective: minimize total time + weighted control effort
         # Total time = sum of (dt_per_interval * n_intervals_per_segment) for each segment
         total_time_expr = 0
         for s in range(n_segments):
             total_time_expr += DT_seg[s] * samples_per_segment[s]
-        opti.minimize(total_time_expr)
+
+        # Control effort = sum of squared control inputs
+        # This penalizes aggressive maneuvers and smooths the trajectory
+        control_effort_expr = ca.sumsqr(U)
+
+        # Combined objective
+        opti.minimize(total_time_expr + self.control_effort_weight * control_effort_expr)
 
         # Constraints
 

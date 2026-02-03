@@ -73,6 +73,7 @@ class SolveRequest(BaseModel):
     robot_params: Optional[RobotParamsRequest] = None
     samples_per_meter: float = Field(20.0, ge=1.0, le=100.0, description="Target samples per meter (default 20 = 1 per 5cm)")
     min_samples_per_segment: int = Field(3, ge=1, le=50, description="Minimum samples between waypoints")
+    control_effort_weight: float = Field(0.0, ge=0.0, le=10.0, description="Weight for control effort penalty (0 = time-optimal)")
 
 
 class SolverStatsResponse(BaseModel):

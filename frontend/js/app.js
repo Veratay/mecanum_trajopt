@@ -71,6 +71,8 @@ function init() {
     const resultsSection = document.getElementById('results-section');
     const samplesPerMeterInput = document.getElementById('samples-per-meter');
     const minSamplesPerSegmentInput = document.getElementById('min-samples-per-segment');
+    const controlEffortWeightInput = document.getElementById('control-effort-weight');
+    const controlEffortWeightValue = document.getElementById('control-effort-weight-value');
 
     const playBtn = document.getElementById('play-btn');
     const chainPlayBtn = document.getElementById('chain-play-btn');
@@ -148,7 +150,8 @@ function init() {
 
     initSolver(callbacks, {
         solveBtn, solveStatusInline, solveStatusEl, solveResultsEl, resultsSection,
-        samplesPerMeterInput, minSamplesPerSegmentInput
+        samplesPerMeterInput, minSamplesPerSegmentInput,
+        controlEffortWeightInput, controlEffortWeightValue
     });
 
     initPlayback(callbacks, {

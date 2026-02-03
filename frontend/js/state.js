@@ -15,7 +15,8 @@ export function createDefaultTrajectory(name = 'Trajectory 1') {
         trajectory: null,
         solverSettings: {
             samplesPerMeter: 20.0,
-            minSamplesPerSegment: 3
+            minSamplesPerSegment: 3,
+            controlEffortWeight: 0.0
         },
         followsTrajectoryId: null
     };
