@@ -12,6 +12,7 @@ export function createDefaultTrajectory(name = 'Trajectory 1') {
         name: name,
         waypoints: [],
         constraints: [],  // Path constraints (obstacles, lanes, etc.)
+        eventMarkers: [],  // Event markers: { waypointIndex, percentage, name, timestamp }
         trajectory: null,
         solverSettings: {
             samplesPerMeter: 20.0,

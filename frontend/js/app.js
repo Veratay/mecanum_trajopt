@@ -49,6 +49,61 @@ function selectTool(tool) {
     }
 }
 
+function initPanelResize() {
+    const handles = document.querySelectorAll('.panel-resize-handle');
+    let activeHandle = null;
+    let startY = 0;
+    let aboveSection = null;
+    let belowSection = null;
+    let aboveStartHeight = 0;
+    let belowStartHeight = 0;
+
+    handles.forEach(handle => {
+        handle.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            activeHandle = handle;
+            startY = e.clientY;
+            aboveSection = handle.previousElementSibling;
+            belowSection = handle.nextElementSibling;
+            aboveStartHeight = aboveSection.getBoundingClientRect().height;
+            belowStartHeight = belowSection.getBoundingClientRect().height;
+            handle.classList.add('dragging');
+            document.body.style.cursor = 'row-resize';
+            document.body.style.userSelect = 'none';
+        });
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!activeHandle) return;
+        const dy = e.clientY - startY;
+        const minHeight = 48;
+
+        let newAboveHeight = aboveStartHeight + dy;
+        let newBelowHeight = belowStartHeight - dy;
+
+        if (newAboveHeight < minHeight) {
+            newAboveHeight = minHeight;
+            newBelowHeight = aboveStartHeight + belowStartHeight - minHeight;
+        }
+        if (newBelowHeight < minHeight) {
+            newBelowHeight = minHeight;
+            newAboveHeight = aboveStartHeight + belowStartHeight - minHeight;
+        }
+
+        aboveSection.style.flex = `0 0 ${newAboveHeight}px`;
+        belowSection.style.flex = `0 0 ${newBelowHeight}px`;
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (activeHandle) {
+            activeHandle.classList.remove('dragging');
+            activeHandle = null;
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        }
+    });
+}
+
 function init() {
     // Initialize canvas
     initCanvas();
@@ -258,6 +313,9 @@ function init() {
             }
         });
     });
+
+    // Panel resize handles
+    initPanelResize();
 
     // Unsaved changes warning
     window.addEventListener('beforeunload', (e) => {

@@ -78,7 +78,8 @@ async def solve_trajectory(request: SolveRequest):
         trajectory=TrajectoryResponse(
             times=result.times,
             states=result.states,
-            controls=result.controls
+            controls=result.controls,
+            waypoint_times=result.waypoint_times
         ),
         solver_stats=SolverStatsResponse(
             iterations=result.iterations,

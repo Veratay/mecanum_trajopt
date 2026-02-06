@@ -55,6 +55,7 @@ class SolverResult:
     times: list[float]  # cumulative times at each knot
     states: list[list[float]]  # states at each knot [vx, vy, omega, px, py, theta]
     controls: list[list[float]]  # controls at each interval [drive, strafe, turn]
+    waypoint_times: list[float]  # time at each waypoint knot
     iterations: int
     solve_time_ms: float
 
@@ -376,6 +377,16 @@ class TrajectoryOptimizer:
         for k in range(N):
             controls.append([float(U_opt[i, k]) for i in range(3)])
 
+        # Compute waypoint times from segment_start_indices
+        waypoint_times = []
+        for i in range(len(waypoints)):
+            if i == 0:
+                waypoint_times.append(times[0])
+            elif i == len(waypoints) - 1:
+                waypoint_times.append(times[K - 1])
+            else:
+                waypoint_times.append(times[segment_start_indices[i]])
+
         # Get solver stats
         try:
             stats = sol.stats()
@@ -389,6 +400,7 @@ class TrajectoryOptimizer:
             times=[float(t) for t in times],
             states=states,
             controls=controls,
+            waypoint_times=[float(t) for t in waypoint_times],
             iterations=iterations,
             solve_time_ms=solve_time_ms
         )

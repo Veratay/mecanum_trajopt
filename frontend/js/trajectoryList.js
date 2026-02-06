@@ -36,7 +36,7 @@ export function updateTrajectoryList() {
                 const wouldCycle = wouldCreateCycle(traj.id, t.id);
                 const disabled = !canBeTarget || wouldCycle || !canFollow(traj.id);
                 const reason = !canFollow(traj.id) ? '(first wp not constrained)'
-                    : !canBeTarget ? '(last wp not constrained)'
+                    : !canBeTarget ? '(last wp must be constrained/unconstrained)'
                     : wouldCycle ? '(would create cycle)' : '';
 
                 return `<option value="${t.id}" ${traj.followsTrajectoryId === t.id ? 'selected' : ''} ${disabled ? 'disabled' : ''}>

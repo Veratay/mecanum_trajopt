@@ -36,6 +36,13 @@ export function render() {
             }
         });
 
+        // Draw event markers for all trajectories in chain
+        chain.forEach(traj => {
+            if (traj.trajectory) {
+                drawEventMarkers(traj);
+            }
+        });
+
         // Draw waypoints for the active trajectory
         drawWaypoints();
 
@@ -62,6 +69,11 @@ export function render() {
 
     // Draw waypoints for active trajectory
     drawWaypoints();
+
+    // Draw event markers for active trajectory
+    if (activeTraj && activeTraj.trajectory) {
+        drawEventMarkers(activeTraj);
+    }
 
     // Draw robot at playback time
     if (activeTraj && activeTraj.trajectory) {
@@ -650,4 +662,58 @@ export function drawRobotAt(px, py, theta) {
     ctx.fill();
 
     ctx.restore();
+}
+
+function drawEventMarkers(traj) {
+    if (!traj.eventMarkers || !traj.trajectory) return;
+
+    const times = traj.trajectory.times;
+    const states = traj.trajectory.states;
+
+    for (const marker of traj.eventMarkers) {
+        if (marker.timestamp === null || marker.timestamp === undefined) continue;
+
+        // Find position at marker timestamp by interpolating trajectory states
+        let idx = 0;
+        for (let i = 0; i < times.length - 1; i++) {
+            if (times[i + 1] >= marker.timestamp) {
+                idx = i;
+                break;
+            }
+            idx = i;
+        }
+
+        const t0 = times[idx];
+        const t1 = times[idx + 1] || times[idx];
+        const alpha = t1 > t0 ? (marker.timestamp - t0) / (t1 - t0) : 0;
+
+        const s0 = states[idx];
+        const s1 = states[idx + 1] || states[idx];
+
+        const mx = s0[3] + alpha * (s1[3] - s0[3]);
+        const my = s0[4] + alpha * (s1[4] - s0[4]);
+
+        const pos = fieldToCanvas(mx, my);
+
+        // Draw diamond marker
+        const size = 7;
+        ctx.save();
+        ctx.translate(pos.x, pos.y);
+        ctx.rotate(Math.PI / 4);
+
+        ctx.fillStyle = '#f59e0b';
+        ctx.fillRect(-size / 2, -size / 2, size, size);
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-size / 2, -size / 2, size, size);
+
+        ctx.restore();
+
+        // Draw label
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 10px "JetBrains Mono", monospace';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(marker.name, pos.x + size + 2, pos.y - 2);
+    }
 }

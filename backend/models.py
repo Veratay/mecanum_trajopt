@@ -85,6 +85,7 @@ class TrajectoryResponse(BaseModel):
     times: list[float]
     states: list[list[float]]  # [vx, vy, omega, px, py, theta] per knot
     controls: list[list[float]]  # [drive, strafe, turn] per interval
+    waypoint_times: list[float]  # time at each waypoint knot
 
 
 class SolveResponse(BaseModel):

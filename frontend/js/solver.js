@@ -3,9 +3,11 @@
  */
 
 import { state, getActiveTrajectory } from './state.js';
+import { syncAllFollowers } from './trajectories.js';
 
 // UI update callbacks (set during init)
 let updateTrajectoryListFn = null;
+let updateWaypointListFn = null;
 let updatePlaybackControlsFn = null;
 let renderFn = null;
 
@@ -22,6 +24,7 @@ let controlEffortWeightValue = null;
 
 export function initSolver(callbacks, elements) {
     updateTrajectoryListFn = callbacks.updateTrajectoryList;
+    updateWaypointListFn = callbacks.updateWaypointList;
     updatePlaybackControlsFn = callbacks.updatePlaybackControls;
     renderFn = callbacks.render;
 
@@ -118,12 +121,18 @@ export async function solve() {
 
             if (result.success) {
                 showStatus('Solution found!', 'success');
+                // Sync followers so they pick up solved heading from unconstrained waypoints
+                syncAllFollowers(traj.id);
             } else {
                 showStatus('Solver did not converge', 'error');
             }
 
+            // Compute event marker timestamps from solved trajectory
+            computeEventMarkerTimestamps(traj);
+
             showResults(result);
             updateTrajectoryListFn();
+            updateWaypointListFn();
             updatePlaybackControlsFn();
             renderFn();
         } else {
@@ -142,6 +151,70 @@ export function showStatus(message, type) {
 
     solveStatusEl.textContent = message;
     solveStatusEl.className = `solve-status ${type}`;
+}
+
+export function computeEventMarkerTimestamps(traj) {
+    if (!traj.eventMarkers || !traj.trajectory || !traj.trajectory.waypoint_times) return;
+
+    const waypointTimes = traj.trajectory.waypoint_times;
+    const times = traj.trajectory.times;
+    const states = traj.trajectory.states;
+
+    for (const marker of traj.eventMarkers) {
+        marker.timestamp = null; // Reset before computing
+        const wpIdx = marker.waypointIndex;
+        if (wpIdx < 0 || wpIdx >= waypointTimes.length) {
+            continue;
+        }
+
+        if (marker.percentage === 0 || wpIdx >= traj.waypoints.length - 1) {
+            // Marker at the waypoint itself
+            marker.timestamp = waypointTimes[wpIdx];
+        } else {
+            // Marker between waypointIndex and waypointIndex+1 at given percentage
+            // Use arc-length interpolation along the path samples
+            const tStart = waypointTimes[wpIdx];
+            const tEnd = waypointTimes[wpIdx + 1];
+
+            // Find knot indices for this time range
+            let kStart = 0, kEnd = times.length - 1;
+            for (let i = 0; i < times.length; i++) {
+                if (Math.abs(times[i] - tStart) < 1e-9) { kStart = i; break; }
+                if (times[i] > tStart) { kStart = Math.max(0, i - 1); break; }
+            }
+            for (let i = times.length - 1; i >= 0; i--) {
+                if (Math.abs(times[i] - tEnd) < 1e-9) { kEnd = i; break; }
+                if (times[i] < tEnd) { kEnd = Math.min(times.length - 1, i + 1); break; }
+            }
+
+            // Compute cumulative arc length between kStart and kEnd
+            const arcLengths = [0];
+            for (let i = kStart + 1; i <= kEnd; i++) {
+                const dx = states[i][3] - states[i - 1][3];
+                const dy = states[i][4] - states[i - 1][4];
+                arcLengths.push(arcLengths[arcLengths.length - 1] + Math.sqrt(dx * dx + dy * dy));
+            }
+            const totalArcLength = arcLengths[arcLengths.length - 1];
+            const targetLength = marker.percentage * totalArcLength;
+
+            // Find the time at the target arc length
+            if (totalArcLength < 1e-9) {
+                marker.timestamp = tStart;
+            } else {
+                for (let i = 1; i < arcLengths.length; i++) {
+                    if (arcLengths[i] >= targetLength) {
+                        const frac = (targetLength - arcLengths[i - 1]) / (arcLengths[i] - arcLengths[i - 1]);
+                        const kIdx = kStart + i - 1;
+                        marker.timestamp = times[kIdx] + frac * (times[kIdx + 1] - times[kIdx]);
+                        break;
+                    }
+                }
+                if (marker.timestamp === undefined || marker.timestamp === null) {
+                    marker.timestamp = tEnd;
+                }
+            }
+        }
+    }
 }
 
 function showResults(result) {

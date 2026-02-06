@@ -83,6 +83,7 @@ export function serializeProject() {
             name: t.name,
             waypoints: t.waypoints,
             constraints: t.constraints || [],
+            eventMarkers: t.eventMarkers || [],
             solverSettings: t.solverSettings,
             trajectory: t.trajectory,
             followsTrajectoryId: t.followsTrajectoryId
@@ -145,6 +146,7 @@ export function deserializeProject(data) {
             name: t.name || 'Trajectory',
             waypoints: t.waypoints || [],
             constraints: t.constraints || [],
+            eventMarkers: t.eventMarkers || [],
             solverSettings: t.solverSettings || { samplesPerMeter: 20.0, minSamplesPerSegment: 3 },
             trajectory: t.trajectory || null,
             followsTrajectoryId: t.followsTrajectoryId || null

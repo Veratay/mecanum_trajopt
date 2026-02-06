@@ -8,7 +8,7 @@ import { canvas, canvasToField, fieldToCanvas, zoom } from './canvas.js';
 import { syncAllFollowers } from './trajectories.js';
 import {
     findWaypointAt, findHeadingHandleAt, findIntakePointAt,
-    addWaypoint, addIntakeWaypoint, selectWaypoint, deselectWaypoint,
+    addWaypoint, addIntakeWaypoint, addEventMarker, selectWaypoint, deselectWaypoint,
     deleteWaypoint, updateWaypointList
 } from './waypoints.js';
 import {
@@ -78,6 +78,12 @@ export function handleCanvasClick(e) {
 
     if (isConstraintTool(state.currentTool)) {
         handleConstraintToolClick(fieldPos.x, fieldPos.y);
+        return;
+    }
+
+    // Event marker tool - snap to closest point on solved curve
+    if (state.currentTool === 'event-marker') {
+        handleEventMarkerClick(fieldPos.x, fieldPos.y);
         return;
     }
 
@@ -402,6 +408,9 @@ export function handleKeyDown(e) {
         case 'w':
             selectToolFn('max-omega');
             break;
+        case 'e':
+            selectToolFn('event-marker');
+            break;
         case ' ':
             e.preventDefault();
             if (traj && traj.trajectory) togglePlaybackFn();
@@ -440,8 +449,87 @@ export function handleKeyDown(e) {
     }
 }
 
+function handleEventMarkerClick(fieldX, fieldY) {
+    const traj = getActiveTrajectory();
+    if (!traj || !traj.trajectory || !traj.trajectory.waypoint_times) return;
+
+    const states = traj.trajectory.states;
+    const times = traj.trajectory.times;
+    const waypointTimes = traj.trajectory.waypoint_times;
+
+    // Find the closest knot on the trajectory to the click position
+    let bestDist = Infinity;
+    let bestIdx = 0;
+    for (let i = 0; i < states.length; i++) {
+        const dx = states[i][3] - fieldX;
+        const dy = states[i][4] - fieldY;
+        const dist = dx * dx + dy * dy;
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestIdx = i;
+        }
+    }
+
+    // Refine: check segments adjacent to bestIdx for a closer interpolated point
+    const bestTime = times[bestIdx];
+
+    // Determine which waypoint segment this time falls in
+    let wpIdx = 0;
+    for (let i = 0; i < waypointTimes.length - 1; i++) {
+        if (bestTime >= waypointTimes[i] && bestTime <= waypointTimes[i + 1]) {
+            wpIdx = i;
+            break;
+        }
+        wpIdx = i;
+    }
+
+    // Compute arc-length percentage within this segment
+    // Find knot ranges for this segment
+    let kStart = 0, kEnd = states.length - 1;
+    const tStart = waypointTimes[wpIdx];
+    const tEnd = wpIdx + 1 < waypointTimes.length ? waypointTimes[wpIdx + 1] : times[times.length - 1];
+
+    for (let i = 0; i < times.length; i++) {
+        if (Math.abs(times[i] - tStart) < 1e-9) { kStart = i; break; }
+        if (times[i] > tStart) { kStart = Math.max(0, i - 1); break; }
+    }
+    for (let i = times.length - 1; i >= 0; i--) {
+        if (Math.abs(times[i] - tEnd) < 1e-9) { kEnd = i; break; }
+        if (times[i] < tEnd) { kEnd = Math.min(times.length - 1, i + 1); break; }
+    }
+
+    // Compute arc length from kStart to bestIdx, and total arc length of segment
+    let arcToBest = 0;
+    let totalArc = 0;
+    for (let i = kStart + 1; i <= kEnd; i++) {
+        const dx = states[i][3] - states[i - 1][3];
+        const dy = states[i][4] - states[i - 1][4];
+        const segLen = Math.sqrt(dx * dx + dy * dy);
+        if (i <= bestIdx) arcToBest += segLen;
+        totalArc += segLen;
+    }
+
+    let percentage = totalArc > 1e-9 ? arcToBest / totalArc : 0;
+
+    // If at the start waypoint exactly (percentage ~0), place at waypoint
+    if (percentage < 0.01) percentage = 0;
+    // If at the end of the last segment, place at last waypoint
+    if (wpIdx >= traj.waypoints.length - 1) {
+        wpIdx = traj.waypoints.length - 1;
+        percentage = 0;
+    }
+
+    addEventMarker(wpIdx, percentage, 'event');
+    markUnsavedFn();
+}
+
 function updateCursor(canvasX, canvasY) {
-    if (state.currentTool !== 'select') {
+    if (state.currentTool !== 'select' && state.currentTool !== 'event-marker') {
+        canvas.style.cursor = 'crosshair';
+        return;
+    }
+
+    if (state.currentTool === 'event-marker') {
         canvas.style.cursor = 'crosshair';
         return;
     }

@@ -95,18 +95,61 @@ body {
     overflow: hidden;
 }
 
-/* Trajectory Section */
-.trajectory-section {
-    flex-shrink: 0;
+/* Panel Sections - resizable flex children */
+.panel-section {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 48px;
 }
 
-.trajectory-section .panel-header {
+#trajectory-panel {
+    flex: 0 0 auto;
+}
+
+#waypoint-panel {
+    flex: 1 1 0;
+    min-height: 80px;
+}
+
+#constraint-panel {
+    flex: 0 1 auto;
+}
+
+/* Resize Handles */
+.panel-resize-handle {
+    height: 6px;
+    background: var(--border-default);
+    cursor: row-resize;
+    flex-shrink: 0;
+    position: relative;
+    transition: background var(--transition-fast);
+}
+
+.panel-resize-handle::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 24px;
+    height: 2px;
+    background: var(--text-tertiary);
+    border-radius: 1px;
+}
+
+.panel-resize-handle:hover,
+.panel-resize-handle.dragging {
+    background: var(--accent-primary);
+}
+
+.panel-section .panel-header {
     border-bottom: none;
     padding-bottom: var(--space-sm);
 }
 
 .trajectory-list {
-    max-height: 180px;
+    flex: 1;
     overflow-y: auto;
     padding: 0 var(--space-sm) var(--space-sm);
 }
@@ -299,6 +342,7 @@ body {
     height: 1px;
     background: var(--border-default);
     margin: 0 var(--space-sm);
+    flex-shrink: 0;
 }
 
 .btn-icon {
@@ -652,6 +696,34 @@ body {
     color: white;
 }
 
+/* Waypoint Move Buttons */
+.wp-move-btn {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+.wp-move-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+}
+
+.wp-move-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
+
 /* Empty State */
 .waypoint-empty {
     display: flex;
@@ -673,6 +745,136 @@ body {
 .waypoint-empty-text {
     font-size: 12px;
     line-height: 1.6;
+}
+
+/* Event Markers */
+.event-markers-section {
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--space-sm);
+}
+
+.event-markers-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-xs) var(--space-sm);
+    margin-bottom: var(--space-xs);
+}
+
+.event-markers-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex: 1;
+}
+
+.event-markers-count {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    background: var(--bg-elevated);
+    padding: 1px 6px;
+    border-radius: var(--radius-sm);
+}
+
+.event-marker-add-btn {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.event-marker-add-btn:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.event-markers-empty {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    text-align: center;
+    padding: var(--space-sm);
+}
+
+.event-marker-item {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-xs);
+    padding: var(--space-sm);
+    background: var(--bg-elevated);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-subtle);
+    margin-bottom: var(--space-xs);
+    position: relative;
+}
+
+.event-marker-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    font-size: 11px;
+}
+
+.event-marker-name-display {
+    font-weight: 600;
+    color: var(--accent-warning);
+}
+
+.event-marker-pos {
+    color: var(--text-tertiary);
+    flex: 1;
+}
+
+.event-marker-time {
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 10px;
+}
+
+.event-marker-fields {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    gap: var(--space-xs);
+}
+
+.event-marker-fields .wp-input-group label {
+    font-size: 9px;
+}
+
+.event-marker-fields .wp-input-group input {
+    height: 24px;
+    font-size: 11px;
+}
+
+.event-marker-delete-btn {
+    position: absolute;
+    top: var(--space-xs);
+    right: var(--space-xs);
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.event-marker-delete-btn:hover {
+    background: var(--accent-danger);
+    color: white;
 }
 
 /* ============================================
@@ -1647,7 +1849,6 @@ body {
     flex: 1;
     overflow-y: auto;
     padding: var(--space-sm);
-    max-height: 200px;
 }
 
 .constraint-empty {

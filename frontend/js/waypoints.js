@@ -6,6 +6,7 @@ import { WAYPOINT_RADIUS, HEADING_LINE_LENGTH, HEADING_HANDLE_RADIUS } from './c
 import { state, getActiveTrajectory, getTrajectoryById } from './state.js';
 import { fieldToCanvas } from './canvas.js';
 import { syncAllFollowers } from './trajectories.js';
+import { computeEventMarkerTimestamps } from './solver.js';
 
 // UI update callbacks (set during init)
 let updateTrajectoryListFn = null;
@@ -191,6 +192,28 @@ export function deleteWaypoint(index) {
         traj.followsTrajectoryId = null;
     }
 
+    // Adjust event marker indices after waypoint deletion
+    if (traj.eventMarkers) {
+        traj.eventMarkers = traj.eventMarkers.filter(m => {
+            if (m.waypointIndex === index && m.percentage > 0 && index === traj.waypoints.length) {
+                return false; // Remove markers between deleted wp and now-nonexistent next
+            }
+            return true;
+        });
+        for (const m of traj.eventMarkers) {
+            if (m.waypointIndex > index) {
+                m.waypointIndex--;
+            } else if (m.waypointIndex === index && m.percentage > 0) {
+                // Was between deleted wp and next; shift to previous segment if possible
+                if (index > 0) {
+                    m.waypointIndex = index - 1;
+                }
+            }
+            // Clamp to valid range
+            m.waypointIndex = Math.max(0, Math.min(m.waypointIndex, traj.waypoints.length - 1));
+        }
+    }
+
     // Clear solved trajectory since waypoints changed
     traj.trajectory = null;
     markUnsavedFn();
@@ -203,6 +226,63 @@ export function deleteWaypoint(index) {
         state.selectedWaypointIndex--;
     }
 
+    updateWaypointListFn();
+    renderFn();
+}
+
+export function moveWaypoint(fromIndex, toIndex) {
+    const traj = getActiveTrajectory();
+    if (!traj) return;
+
+    const waypoints = traj.waypoints;
+    if (toIndex < 0 || toIndex >= waypoints.length) return;
+    if (fromIndex < 0 || fromIndex >= waypoints.length) return;
+
+    // Splice out the waypoint and re-insert at the new position
+    const [wp] = waypoints.splice(fromIndex, 1);
+    waypoints.splice(toIndex, 0, wp);
+
+    // Adjust event marker waypointIndex values to follow the moved waypoint
+    if (traj.eventMarkers) {
+        for (const m of traj.eventMarkers) {
+            if (m.waypointIndex === fromIndex) {
+                m.waypointIndex = toIndex;
+            } else if (fromIndex < toIndex) {
+                // Moved down: indices between (fromIndex, toIndex] shift down by 1
+                if (m.waypointIndex > fromIndex && m.waypointIndex <= toIndex) {
+                    m.waypointIndex--;
+                }
+            } else {
+                // Moved up: indices between [toIndex, fromIndex) shift up by 1
+                if (m.waypointIndex >= toIndex && m.waypointIndex < fromIndex) {
+                    m.waypointIndex++;
+                }
+            }
+        }
+    }
+
+    // Enforce first/last waypoint stop = true
+    if (waypoints.length > 0) {
+        waypoints[0].stop = true;
+        waypoints[waypoints.length - 1].stop = true;
+    }
+
+    // If index 0 is involved in the move and trajectory is chained, unlink
+    if ((fromIndex === 0 || toIndex === 0) && traj.followsTrajectoryId) {
+        traj.followsTrajectoryId = null;
+    }
+
+    // Clear solved trajectory
+    traj.trajectory = null;
+
+    // Update selection to follow the moved waypoint
+    if (state.selectedWaypointIndex === fromIndex) {
+        state.selectedWaypointIndex = toIndex;
+        state.expandedWaypointIndex = toIndex;
+    }
+
+    markUnsavedFn();
+    updateTrajectoryListFn();
     updateWaypointListFn();
     renderFn();
 }
@@ -264,8 +344,9 @@ export function updateWaypointField(index, field, value) {
             traj.followsTrajectoryId = null;
         }
 
-        // If last waypoint type changes from constrained, unlink any trajectories following this one
-        if (index === traj.waypoints.length - 1 && oldType === 'constrained' && value !== 'constrained') {
+        // If last waypoint type changes to intake, unlink any trajectories following this one
+        // (constrained and unconstrained are both valid for chaining)
+        if (index === traj.waypoints.length - 1 && value === 'intake') {
             state.trajectories.forEach(t => {
                 if (t.followsTrajectoryId === traj.id) {
                     t.followsTrajectoryId = null;
@@ -334,6 +415,7 @@ export function clearWaypoints() {
     if (!traj) return;
 
     traj.waypoints = [];
+    traj.eventMarkers = [];
     traj.trajectory = null;
 
     // Unlink any trajectories that follow this one
@@ -353,6 +435,66 @@ export function clearWaypoints() {
     updateTrajectoryListFn();
     updateWaypointListFn();
     updatePlaybackControlsFn();
+    renderFn();
+}
+
+// Event marker CRUD
+export function addEventMarker(waypointIndex, percentage, name) {
+    const traj = getActiveTrajectory();
+    if (!traj) return;
+
+    if (!traj.eventMarkers) traj.eventMarkers = [];
+
+    const marker = {
+        waypointIndex: waypointIndex,
+        percentage: percentage,
+        name: name || 'event',
+        timestamp: null
+    };
+
+    traj.eventMarkers.push(marker);
+
+    // Compute timestamp if trajectory is solved
+    computeEventMarkerTimestamps(traj);
+
+    markUnsavedFn();
+    updateWaypointListFn();
+    renderFn();
+}
+
+export function updateEventMarker(index, field, value) {
+    const traj = getActiveTrajectory();
+    if (!traj || !traj.eventMarkers || index >= traj.eventMarkers.length) return;
+
+    const marker = traj.eventMarkers[index];
+
+    switch (field) {
+        case 'name':
+            marker.name = value;
+            break;
+        case 'waypointIndex':
+            marker.waypointIndex = Math.max(0, Math.min(parseInt(value), traj.waypoints.length - 1));
+            break;
+        case 'percentage':
+            marker.percentage = Math.max(0, Math.min(parseFloat(value) / 100, 1));
+            break;
+    }
+
+    // Recompute timestamp
+    computeEventMarkerTimestamps(traj);
+
+    markUnsavedFn();
+    updateWaypointListFn();
+    renderFn();
+}
+
+export function deleteEventMarker(index) {
+    const traj = getActiveTrajectory();
+    if (!traj || !traj.eventMarkers) return;
+
+    traj.eventMarkers.splice(index, 1);
+    markUnsavedFn();
+    updateWaypointListFn();
     renderFn();
 }
 
@@ -419,6 +561,16 @@ export function updateWaypointList() {
                     ${isLockedFirst ? '<span class="waypoint-locked-badge">Linked</span>' : ''}
                     ${wp.stop ? '<span class="waypoint-stop-badge">Stop</span>' : ''}
                     <span class="waypoint-coords">${coords}</span>
+                    <button class="wp-move-btn" data-index="${i}" data-direction="up" title="Move up" ${i === 0 ? 'disabled' : ''}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="18 15 12 9 6 15"/>
+                        </svg>
+                    </button>
+                    <button class="wp-move-btn" data-index="${i}" data-direction="down" title="Move down" ${isLast ? 'disabled' : ''}>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <polyline points="6 9 12 15 18 9"/>
+                        </svg>
+                    </button>
                     <svg class="waypoint-expand-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"/>
                     </svg>
@@ -514,7 +666,57 @@ export function updateWaypointList() {
         `;
     }).join('');
 
-    // Add event listeners
+    // Event markers section
+    const markers = traj.eventMarkers || [];
+    const markerHtml = `
+        <div class="event-markers-section">
+            <div class="event-markers-header">
+                <span class="event-markers-title">Event Markers</span>
+                <span class="event-markers-count">${markers.length}</span>
+            </div>
+            ${markers.length > 0 ? markers.map((m, mi) => {
+                const pctDisplay = (m.percentage * 100).toFixed(0);
+                const posLabel = m.percentage === 0
+                    ? `At waypoint ${m.waypointIndex + 1}`
+                    : `WP ${m.waypointIndex + 1} → ${m.waypointIndex + 2} @ ${pctDisplay}%`;
+                const tsDisplay = m.timestamp !== null && m.timestamp !== undefined
+                    ? `${m.timestamp.toFixed(3)}s`
+                    : '—';
+                return `
+                    <div class="event-marker-item">
+                        <div class="event-marker-info">
+                            <span class="event-marker-name-display">${m.name}</span>
+                            <span class="event-marker-pos">${posLabel}</span>
+                            <span class="event-marker-time">${tsDisplay}</span>
+                        </div>
+                        <div class="event-marker-fields">
+                            <div class="wp-input-group">
+                                <label>Name</label>
+                                <input type="text" value="${m.name}" data-marker-index="${mi}" data-marker-field="name">
+                            </div>
+                            <div class="wp-input-group">
+                                <label>Waypoint</label>
+                                <input type="number" min="1" max="${waypoints.length}" step="1" value="${m.waypointIndex + 1}" data-marker-index="${mi}" data-marker-field="waypointIndex">
+                            </div>
+                            <div class="wp-input-group">
+                                <label>% Along</label>
+                                <input type="number" min="0" max="100" step="5" value="${pctDisplay}" data-marker-index="${mi}" data-marker-field="percentage">
+                            </div>
+                        </div>
+                        <button class="event-marker-delete-btn" data-marker-index="${mi}" title="Delete marker">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                            </svg>
+                        </button>
+                    </div>
+                `;
+            }).join('') : '<div class="event-markers-empty">No event markers</div>'}
+        </div>
+    `;
+
+    waypointListEl.innerHTML += markerHtml;
+
+    // Add event listeners for waypoints
     waypointListEl.querySelectorAll('.waypoint-header-row').forEach(row => {
         row.addEventListener('click', (e) => {
             const index = parseInt(e.currentTarget.dataset.index);
@@ -533,7 +735,7 @@ export function updateWaypointList() {
         });
     });
 
-    waypointListEl.querySelectorAll('.wp-input-group input').forEach(input => {
+    waypointListEl.querySelectorAll('.wp-input-group input[data-field]').forEach(input => {
         input.addEventListener('change', (e) => {
             e.stopPropagation();
             updateWaypointField(parseInt(input.dataset.index), input.dataset.field, input.value);
@@ -553,6 +755,37 @@ export function updateWaypointList() {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
             deleteWaypoint(parseInt(btn.dataset.index));
+        });
+    });
+
+    waypointListEl.querySelectorAll('.wp-move-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const i = parseInt(btn.dataset.index);
+            const dir = btn.dataset.direction;
+            moveWaypoint(i, dir === 'up' ? i - 1 : i + 1);
+        });
+    });
+
+    // Event marker listeners
+    waypointListEl.querySelectorAll('.event-marker-item input[data-marker-field]').forEach(input => {
+        input.addEventListener('change', (e) => {
+            e.stopPropagation();
+            const mi = parseInt(input.dataset.markerIndex);
+            const field = input.dataset.markerField;
+            if (field === 'waypointIndex') {
+                updateEventMarker(mi, field, parseInt(input.value) - 1);
+            } else {
+                updateEventMarker(mi, field, input.value);
+            }
+        });
+        input.addEventListener('click', e => e.stopPropagation());
+    });
+
+    waypointListEl.querySelectorAll('.event-marker-delete-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteEventMarker(parseInt(btn.dataset.markerIndex));
         });
     });
 }

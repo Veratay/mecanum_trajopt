@@ -115,11 +115,11 @@ export function toggleTrajectoryExpanded(id) {
 
 // Trajectory chaining helpers
 export function canBeFollowed(trajId) {
-    // A trajectory can be followed if its last waypoint is constrained
+    // A trajectory can be followed if its last waypoint is constrained or unconstrained
     const traj = getTrajectoryById(trajId);
     if (!traj || traj.waypoints.length === 0) return false;
     const lastWp = traj.waypoints[traj.waypoints.length - 1];
-    return lastWp.type === 'constrained';
+    return lastWp.type === 'constrained' || lastWp.type === 'unconstrained';
 }
 
 export function canFollow(trajId) {
@@ -162,7 +162,7 @@ export function setTrajectoryFollows(id, followsId) {
 
     // Validate
     if (followsId === id) return; // Can't follow self
-    if (!canBeFollowed(followsId)) return; // Target's last wp must be constrained
+    if (!canBeFollowed(followsId)) return; // Target's last wp must be constrained or unconstrained
     if (!canFollow(id)) return; // Our first wp must be constrained
     if (wouldCreateCycle(id, followsId)) return; // No cycles
 
@@ -186,10 +186,17 @@ export function syncChainedWaypoint(trajId) {
     const lastWp = followedTraj.waypoints[followedTraj.waypoints.length - 1];
     const firstWp = traj.waypoints[0];
 
-    // Copy position and heading from followed trajectory's end
+    // Copy position from followed trajectory's end
     firstWp.x = lastWp.x;
     firstWp.y = lastWp.y;
-    firstWp.heading = lastWp.heading;
+
+    if (lastWp.type === 'unconstrained' && followedTraj.trajectory) {
+        // For unconstrained waypoints, read the solved heading from trajectory data
+        const lastState = followedTraj.trajectory.states[followedTraj.trajectory.states.length - 1];
+        firstWp.heading = lastState[5]; // theta
+    } else {
+        firstWp.heading = lastWp.heading;
+    }
 }
 
 export function syncAllFollowers(trajId) {
