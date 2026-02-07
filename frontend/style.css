@@ -890,7 +890,7 @@ body {
 
 /* Toolbar */
 .toolbar {
-    height: var(--toolbar-height);
+    min-height: var(--toolbar-height);
     background: var(--bg-primary);
     border-bottom: 1px solid var(--border-subtle);
     display: flex;
@@ -898,6 +898,8 @@ body {
     padding: 0 var(--space-md);
     gap: var(--space-md);
     flex-shrink: 0;
+    flex-wrap: wrap;
+    overflow-x: auto;
 }
 
 .tool-group {
@@ -1143,6 +1145,29 @@ body {
     background: var(--bg-primary);
     border-left: 1px solid var(--border-subtle);
     overflow-y: auto;
+}
+
+/* Panel Controls Bar - matches toolbar height */
+.panel-controls-bar {
+    height: var(--toolbar-height);
+    min-height: var(--toolbar-height);
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 var(--space-md);
+    flex-shrink: 0;
+}
+
+.panel-controls-bar .project-controls {
+    width: 100%;
+    justify-content: center;
+}
+
+.panel-controls-bar .btn {
+    flex: 1;
+    max-width: 80px;
 }
 
 .settings-section {
@@ -1509,21 +1534,384 @@ body {
    RESPONSIVE
    ============================================ */
 
-@media (max-width: 1200px) {
+/* Smaller desktop screens (1366px laptops) */
+@media (max-width: 1440px) {
     :root {
-        --panel-width: 240px;
+        --panel-width: 260px;
+        --space-lg: 14px;
+    }
+
+    .toolbar {
+        padding: 0 var(--space-sm);
+        gap: var(--space-sm);
+    }
+
+    .project-name {
+        max-width: 120px;
     }
 }
 
+/* Small laptops (1280px and below) */
+@media (max-width: 1366px) {
+    :root {
+        --panel-width: 240px;
+        --space-lg: 12px;
+    }
+
+    .tool-btn {
+        width: 32px;
+        height: 28px;
+    }
+
+    /* Hide solve button text only */
+    .btn-solve .btn-text {
+        display: none;
+    }
+
+    /* Keep project control buttons compact but with text */
+    .panel-controls-bar .btn {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+}
+
+/* Very small laptops (1024px) */
+@media (max-width: 1280px) {
+    :root {
+        --panel-width: 220px;
+    }
+
+    .panel-header {
+        padding: var(--space-md);
+    }
+
+    .section-header {
+        padding: var(--space-sm) var(--space-md);
+    }
+
+    .section-content {
+        padding: 0 var(--space-md) var(--space-md);
+    }
+
+    .input-with-unit input {
+        width: 56px;
+    }
+
+    .input-row > input[type="number"] {
+        width: 56px;
+    }
+
+    /* Make toolbar more compact */
+    .toolbar {
+        padding: 0 var(--space-sm);
+        gap: 6px;
+    }
+
+    .toolbar-divider {
+        margin: 0 2px;
+    }
+
+    .solve-status-inline {
+        font-size: 11px;
+    }
+
+    /* Compact panel controls */
+    .panel-controls-bar .btn {
+        font-size: 10px;
+        padding: 4px 6px;
+        gap: 4px;
+    }
+
+    .panel-controls-bar .btn svg {
+        width: 12px;
+        height: 12px;
+    }
+}
+
+/* Compact mode for 1024px and below */
+@media (max-width: 1024px) {
+    :root {
+        --panel-width: 200px;
+        --toolbar-height: 44px;
+    }
+
+    .panel-header h1 {
+        font-size: 12px;
+    }
+
+    .section-header h2 {
+        font-size: 10px;
+    }
+
+    .tool-btn {
+        width: 28px;
+        height: 26px;
+    }
+
+    .tool-btn svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .btn-solve {
+        padding: 0 10px;
+        height: 28px;
+        font-size: 11px;
+    }
+
+    .canvas-wrapper {
+        padding: var(--space-md);
+    }
+
+    /* Hide less critical toolbar items */
+    .project-name {
+        display: none;
+    }
+
+    .solve-status-inline {
+        font-size: 10px;
+        max-width: 150px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* Make tool groups more compact */
+    .tool-group {
+        padding: 2px;
+        gap: 1px;
+    }
+
+    /* Reduce panel padding */
+    .waypoint-list-container,
+    .constraint-list-container {
+        padding: var(--space-xs);
+    }
+
+    .trajectory-list {
+        padding: 0 var(--space-xs) var(--space-xs);
+    }
+
+    /* Make trajectory items more compact */
+    .trajectory-header-row {
+        padding: var(--space-xs) var(--space-sm);
+    }
+
+    .waypoint-header-row,
+    .constraint-header-row {
+        padding: var(--space-sm);
+    }
+}
+
+/* Minimal laptop mode - very compact panels */
+@media (max-width: 960px) {
+    :root {
+        --panel-width: 180px;
+    }
+
+    .panel-header,
+    .panel-footer {
+        padding: var(--space-sm);
+    }
+
+    .panel-header h1 {
+        font-size: 11px;
+    }
+
+    .section-header h2 {
+        font-size: 9px;
+    }
+
+    /* Hide event marker tool on very small screens */
+    .tool-btn[data-tool="event-marker"] {
+        display: none;
+    }
+
+    /* Stack less critical constraint tools */
+    .constraint-tools .tool-btn[data-tool="max-velocity"],
+    .constraint-tools .tool-btn[data-tool="max-omega"] {
+        display: none;
+    }
+
+    /* Ultra compact inputs */
+    .input-with-unit input {
+        width: 48px;
+        font-size: 11px;
+    }
+
+    .input-row > input[type="number"] {
+        width: 48px;
+        font-size: 11px;
+    }
+
+    /* Icon-only project controls for very narrow panels */
+    .panel-controls-bar .btn .btn-text {
+        display: none;
+    }
+
+    .panel-controls-bar .btn {
+        padding: 6px;
+        max-width: none;
+        flex: 1;
+    }
+}
+
+/* Tablet/Mobile - overlay panels */
 @media (max-width: 900px) {
     .app-container {
         grid-template-columns: 1fr;
         grid-template-rows: auto 1fr auto;
     }
 
-    .panel-left, .panel-right {
-        display: none;
+    /* Show panel toggle buttons */
+    .panel-toggle-btn {
+        display: flex;
     }
+
+    /* Convert panels to overlays */
+    .panel-left,
+    .panel-right {
+        position: fixed;
+        top: var(--toolbar-height);
+        bottom: var(--playback-height);
+        width: 320px;
+        max-width: 85vw;
+        z-index: 101;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .panel-left {
+        left: 0;
+    }
+
+    .panel-right {
+        right: 0;
+        left: auto;
+        transform: translateX(100%);
+    }
+
+    /* Show panels when active */
+    .panel-left.visible {
+        transform: translateX(0);
+    }
+
+    .panel-right.visible {
+        transform: translateX(0);
+    }
+
+    /* Show all tools when panels are overlays */
+    .tool-btn[data-tool="event-marker"],
+    .constraint-tools .tool-btn[data-tool="max-velocity"],
+    .constraint-tools .tool-btn[data-tool="max-omega"] {
+        display: flex;
+    }
+
+    /* Close button for overlay panels */
+    .panel-close-btn {
+        display: none;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 36px;
+        height: 36px;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        cursor: pointer;
+        z-index: 1000;
+        transition: all var(--transition-fast);
+    }
+
+    .panel-close-btn:hover {
+        background: var(--bg-hover);
+        border-color: var(--border-strong);
+        color: var(--text-primary);
+    }
+
+    /* Show close button on small screens */
+    @media (max-width: 900px) {
+        .panel-close-btn {
+            display: flex;
+        }
+
+        /* Ensure panel headers have enough padding to not overlap close button */
+        .panel-left .panel-header:first-child {
+            padding-right: 52px;
+        }
+
+        /* For right panel, the close button is above the controls bar */
+        .panel-right .panel-close-btn {
+            top: calc(var(--toolbar-height) + 10px);
+        }
+
+        .panel-right .settings-section:first-child .section-header {
+            padding-right: var(--space-md);
+        }
+
+        /* Show full button text in overlay mode (wider panels) */
+        .panel-controls-bar .btn .btn-text {
+            display: inline;
+        }
+
+        .panel-controls-bar .btn {
+            font-size: 11px;
+            padding: 6px 10px;
+        }
+    }
+}
+
+/* ============================================
+   PANEL TOGGLES
+   ============================================ */
+
+.panel-toggle-btn {
+    display: none; /* Hidden on desktop */
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.panel-toggle-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.panel-toggle-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+/* Panel Overlay Backdrop */
+.panel-overlay {
+    display: none;
+    position: fixed;
+    top: var(--toolbar-height);
+    left: 0;
+    right: 0;
+    bottom: var(--playback-height);
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(2px);
+    z-index: 100;
+    opacity: 0;
+    transition: opacity var(--transition-normal);
+}
+
+.panel-overlay.visible {
+    display: block;
+    opacity: 1;
 }
 
 /* ============================================

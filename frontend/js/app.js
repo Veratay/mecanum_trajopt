@@ -317,6 +317,61 @@ function init() {
     // Panel resize handles
     initPanelResize();
 
+    // Panel toggles for small screens
+    const toggleLeftBtn = document.getElementById('toggle-left-panel');
+    const toggleRightBtn = document.getElementById('toggle-right-panel');
+    const panelLeft = document.getElementById('panel-left');
+    const panelRight = document.getElementById('panel-right');
+    const panelOverlay = document.getElementById('panel-overlay');
+
+    // Create close buttons for panels
+    const createCloseButton = () => {
+        const btn = document.createElement('button');
+        btn.className = 'panel-close-btn';
+        btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>`;
+        btn.setAttribute('aria-label', 'Close panel');
+        return btn;
+    };
+
+    const leftCloseBtn = createCloseButton();
+    const rightCloseBtn = createCloseButton();
+    panelLeft.insertBefore(leftCloseBtn, panelLeft.firstChild);
+    panelRight.insertBefore(rightCloseBtn, panelRight.firstChild);
+
+    function closeAllPanels() {
+        panelLeft.classList.remove('visible');
+        panelRight.classList.remove('visible');
+        panelOverlay.classList.remove('visible');
+        toggleLeftBtn.classList.remove('active');
+        toggleRightBtn.classList.remove('active');
+    }
+
+    toggleLeftBtn.addEventListener('click', () => {
+        const isVisible = panelLeft.classList.contains('visible');
+        closeAllPanels();
+        if (!isVisible) {
+            panelLeft.classList.add('visible');
+            panelOverlay.classList.add('visible');
+            toggleLeftBtn.classList.add('active');
+        }
+    });
+
+    toggleRightBtn.addEventListener('click', () => {
+        const isVisible = panelRight.classList.contains('visible');
+        closeAllPanels();
+        if (!isVisible) {
+            panelRight.classList.add('visible');
+            panelOverlay.classList.add('visible');
+            toggleRightBtn.classList.add('active');
+        }
+    });
+
+    panelOverlay.addEventListener('click', closeAllPanels);
+    leftCloseBtn.addEventListener('click', closeAllPanels);
+    rightCloseBtn.addEventListener('click', closeAllPanels);
+
     // Unsaved changes warning
     window.addEventListener('beforeunload', (e) => {
         if (state.hasUnsavedChanges) {

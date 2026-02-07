@@ -11,8 +11,11 @@
 </head>
 <body>
     <div class="app-container">
+        <!-- Panel Overlay Backdrop -->
+        <div class="panel-overlay" id="panel-overlay"></div>
+
         <!-- Left Panel: Trajectories & Waypoints -->
-        <aside class="panel-left">
+        <aside class="panel-left" id="panel-left">
             <!-- Trajectory Panel -->
             <section class="panel-section" id="trajectory-panel">
                 <div class="panel-header">
@@ -70,6 +73,12 @@
         <main class="canvas-area">
             <!-- Toolbar -->
             <div class="toolbar">
+                <button id="toggle-left-panel" class="panel-toggle-btn" title="Toggle Waypoints Panel">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="7" height="18" rx="1"/>
+                        <rect x="14" y="3" width="7" height="18" rx="1"/>
+                    </svg>
+                </button>
                 <div class="tool-group">
                     <button class="tool-btn active" data-tool="select" title="Select & Move (V)">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -146,33 +155,16 @@
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polygon points="5 3 19 12 5 21 5 3"/>
                     </svg>
-                    Solve
+                    <span class="btn-text">Solve</span>
                 </button>
                 <div class="solve-status-inline" id="solve-status-inline"></div>
                 <div class="toolbar-divider"></div>
-                <div class="project-controls">
-                    <button id="open-btn" class="btn btn-secondary" title="Open Project (Ctrl+O)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-                        </svg>
-                        Open
-                    </button>
-                    <button id="save-btn" class="btn btn-secondary" title="Save Project (Ctrl+S)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
-                            <polyline points="17 21 17 13 7 13 7 21"/>
-                            <polyline points="7 3 7 8 15 8"/>
-                        </svg>
-                        Save
-                    </button>
-                    <button id="sync-btn" class="btn btn-secondary" title="Sync to Android">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                            <line x1="12" y1="18" x2="12" y2="18"/>
-                        </svg>
-                        Sync
-                    </button>
-                </div>
+                <button id="toggle-right-panel" class="panel-toggle-btn" title="Toggle Settings Panel">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M12 1v6m0 6v6M6 12H1m6 0h6m6 0h4"/>
+                    </svg>
+                </button>
                 <span id="project-name" class="project-name">Untitled</span>
             </div>
 
@@ -231,7 +223,34 @@
         </main>
 
         <!-- Right Panel: Settings -->
-        <aside class="panel-right">
+        <aside class="panel-right" id="panel-right">
+            <!-- Project Controls Bar -->
+            <div class="panel-controls-bar">
+                <div class="project-controls">
+                    <button id="open-btn" class="btn btn-secondary" title="Open Project (Ctrl+O)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                        <span class="btn-text">Open</span>
+                    </button>
+                    <button id="save-btn" class="btn btn-secondary" title="Save Project (Ctrl+S)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                            <polyline points="17 21 17 13 7 13 7 21"/>
+                            <polyline points="7 3 7 8 15 8"/>
+                        </svg>
+                        <span class="btn-text">Save</span>
+                    </button>
+                    <button id="sync-btn" class="btn btn-secondary" title="Sync to Android">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                            <line x1="12" y1="18" x2="12" y2="18"/>
+                        </svg>
+                        <span class="btn-text">Sync</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Field Settings -->
             <section class="settings-section">
                 <div class="section-header" data-collapse="field-settings">
