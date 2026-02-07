@@ -9,22 +9,16 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from ..models import ProjectMetadata, ProjectListResponse
+from ..config import get_projects_dir
 
 router = APIRouter()
-
-# Get the project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-PROJECTS_DIR = PROJECT_ROOT / "projects"
-
-# Ensure directory exists
-PROJECTS_DIR.mkdir(exist_ok=True)
 
 
 @router.get("/projects", response_model=ProjectListResponse)
 async def list_projects():
     """List all saved projects with metadata."""
     projects = []
-    for path in PROJECTS_DIR.glob("*.json"):
+    for path in get_projects_dir().glob("*.json"):
         try:
             with open(path, 'r') as f:
                 data = json.load(f)
@@ -50,7 +44,7 @@ async def load_project(filename: str):
 
     # Sanitize filename to prevent directory traversal
     safe_filename = Path(filename).name
-    path = PROJECTS_DIR / safe_filename
+    path = get_projects_dir() / safe_filename
 
     if not path.exists():
         raise HTTPException(status_code=404, detail="Project not found")
@@ -71,7 +65,7 @@ async def save_project(filename: str, project: dict):
 
     # Sanitize filename
     safe_filename = Path(filename).name
-    path = PROJECTS_DIR / safe_filename
+    path = get_projects_dir() / safe_filename
 
     # Add/update timestamp
     project['updatedAt'] = datetime.utcnow().isoformat() + 'Z'
@@ -91,7 +85,7 @@ async def delete_project(filename: str):
         filename += '.json'
 
     safe_filename = Path(filename).name
-    path = PROJECTS_DIR / safe_filename
+    path = get_projects_dir() / safe_filename
 
     if not path.exists():
         raise HTTPException(status_code=404, detail="Project not found")

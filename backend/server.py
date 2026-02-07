@@ -16,6 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from .routes import solve_router, projects_router, images_router, adb_router
+from .config import get_projects_dir
 
 
 # Create FastAPI app
@@ -43,6 +44,12 @@ async def serve_frontend():
     if not index_path.exists():
         raise HTTPException(status_code=404, detail="Frontend not found")
     return FileResponse(index_path)
+
+
+@app.on_event("startup")
+async def log_config():
+    """Log the active project directory on startup."""
+    print(f"Project directory: {get_projects_dir()}")
 
 
 @app.get("/health")

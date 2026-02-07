@@ -2,21 +2,15 @@
 Background image storage endpoints.
 """
 
-import uuid
+import hashlib
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 
+from ..config import get_images_dir
+
 router = APIRouter()
-
-# Get the project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-PROJECTS_DIR = PROJECT_ROOT / "projects"
-IMAGES_DIR = PROJECTS_DIR / "images"
-
-# Ensure directory exists
-IMAGES_DIR.mkdir(exist_ok=True)
 
 
 @router.post("/images/upload")
@@ -27,23 +21,31 @@ async def upload_image(file: UploadFile = File(...)):
     if ext not in ['.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp']:
         raise HTTPException(status_code=400, detail="Invalid image format")
 
-    new_filename = f"{uuid.uuid4().hex}{ext}"
-    path = IMAGES_DIR / new_filename
-
     try:
         contents = await file.read()
-        with open(path, 'wb') as f:
-            f.write(contents)
-        return {"filename": new_filename}
     except IOError as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save image: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to read upload: {str(e)}")
+
+    # Use content hash as filename to deduplicate identical images
+    content_hash = hashlib.sha256(contents).hexdigest()
+    new_filename = f"{content_hash}{ext}"
+    path = get_images_dir() / new_filename
+
+    if not path.exists():
+        try:
+            with open(path, 'wb') as f:
+                f.write(contents)
+        except IOError as e:
+            raise HTTPException(status_code=500, detail=f"Failed to save image: {str(e)}")
+
+    return {"filename": new_filename}
 
 
 @router.get("/images/{filename}")
 async def get_image(filename: str):
     """Serve a stored background image."""
     safe_filename = Path(filename).name
-    path = IMAGES_DIR / safe_filename
+    path = get_images_dir() /safe_filename
 
     if not path.exists():
         raise HTTPException(status_code=404, detail="Image not found")

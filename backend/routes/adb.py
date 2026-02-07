@@ -8,12 +8,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 
 from ..models import AdbPushRequest, AdbStatusResponse
+from ..config import get_projects_dir
 
 router = APIRouter()
 
-# Get the project root directory
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-PROJECTS_DIR = PROJECT_ROOT / "projects"
 ANDROID_PATH = "/sdcard/FIRST/trajopt/"
 
 
@@ -65,7 +63,7 @@ async def adb_push(request: AdbPushRequest):
         filename += '.json'
 
     safe_filename = Path(filename).name
-    source_path = PROJECTS_DIR / safe_filename
+    source_path = get_projects_dir() / safe_filename
 
     if not source_path.exists():
         raise HTTPException(status_code=404, detail="Project not found")
