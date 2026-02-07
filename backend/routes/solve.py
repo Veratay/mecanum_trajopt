@@ -53,7 +53,7 @@ async def solve_trajectory(request: SolveRequest):
         PathConstraint(
             type=c.type,
             from_waypoint=c.fromWaypoint,
-            to_waypoint=c.toWaypoint,
+            to_waypoint=c.toWaypoint-1,
             params=c.params.model_dump(exclude_none=True)
         )
         for c in request.constraints if c.enabled
