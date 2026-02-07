@@ -71,18 +71,66 @@ export function updateProjectNameDisplay() {
 
 export function serializeProject() {
     return {
-        version: 2,
+        version: 3,
         name: state.projectName,
         updatedAt: new Date().toISOString(),
         fieldSize: state.fieldSize,
         backgroundImageFilename: state.backgroundImageFilename,
         backgroundSettings: state.backgroundSettings,
-        robotParams: getRobotParams(),
+
+        // Variables
+        variables: {
+            vars: Array.from(state.variables.vars.entries()).map(([name, data]) => ({
+                name,
+                value: data.value,
+                linkedFrom: data.linkedFrom
+            })),
+            linkedFrom: state.variables.linkedFrom
+        },
+
+        // Robot params with linking
+        robotParams: {
+            ...getRobotParams(),
+            linkedFrom: state.robotParams.linkedFrom
+        },
+
         trajectories: state.trajectories.map(t => ({
             id: t.id,
             name: t.name,
-            waypoints: t.waypoints,
-            constraints: t.constraints || [],
+            waypoints: t.waypoints.map((wp, i) => {
+                const baseWp = { ...wp };
+
+                // Add _exp fields for any expressions
+                const fields = ['x', 'y', 'heading', 'v_max', 'omega_max', 'intake_x', 'intake_y', 'intake_distance', 'intake_velocity_max', 'intake_velocity_slack'];
+                fields.forEach(field => {
+                    const key = `waypoint:${t.id}:${i}:${field}`;
+                    const expr = state.expressionMap.get(key);
+                    if (expr) {
+                        baseWp[`${field}_exp`] = expr;
+                    }
+                });
+
+                return baseWp;
+            }),
+            constraints: (t.constraints || []).map(con => {
+                const baseCon = { ...con };
+
+                // Add _exp fields for constraint params
+                if (con.params) {
+                    Object.keys(con.params).forEach(field => {
+                        const key = `constraint:${t.id}:${con.id}:${field}`;
+                        const expr = state.expressionMap.get(key);
+                        if (expr) {
+                            if (!baseCon.params_exp) {
+                                baseCon.params_exp = {};
+                            }
+                            baseCon.params_exp[field] = expr;
+                        }
+                    });
+                }
+
+                return baseCon;
+            }),
             eventMarkers: t.eventMarkers || [],
             solverSettings: t.solverSettings,
             trajectory: t.trajectory,
@@ -92,10 +140,34 @@ export function serializeProject() {
 }
 
 export function deserializeProject(data) {
+    // Handle version migration
+    const version = data.version || 1;
+    if (version < 3) {
+        // Migrate to v3: add empty variables, no expressions
+        data.variables = data.variables || { vars: [], linkedFrom: null };
+        if (data.robotParams && !data.robotParams.linkedFrom) {
+            data.robotParams.linkedFrom = null;
+        }
+    }
+
     // Reset state
     state.projectName = data.name || 'Untitled';
     state.fieldSize = data.fieldSize || 3.66;
     state.backgroundImageFilename = data.backgroundImageFilename || null;
+
+    // Load variables
+    state.variables.vars.clear();
+    state.expressionMap.clear();
+
+    if (data.variables && data.variables.vars) {
+        data.variables.vars.forEach(v => {
+            state.variables.vars.set(v.name, {
+                value: v.value,
+                linkedFrom: v.linkedFrom || null
+            });
+        });
+    }
+    state.variables.linkedFrom = data.variables?.linkedFrom || null;
 
     if (data.backgroundSettings) {
         state.backgroundSettings = { ...state.backgroundSettings, ...data.backgroundSettings };
@@ -124,7 +196,7 @@ export function deserializeProject(data) {
         bgControls.style.display = 'none';
     }
 
-    // Load robot params
+    // Load robot params with linking
     if (data.robotParams) {
         const rp = data.robotParams;
         document.getElementById('param-mass').value = rp.mass ?? 15.0;
@@ -137,20 +209,60 @@ export function deserializeProject(data) {
         document.getElementById('param-ftraction').value = rp.f_traction_max ?? 20.0;
         document.getElementById('param-intake-distance').value = rp.default_intake_distance ?? 0.5;
         document.getElementById('param-intake-velocity').value = rp.default_intake_velocity ?? 1.0;
+
+        state.robotParams.linkedFrom = rp.linkedFrom || null;
     }
 
-    // Load trajectories
+    // Load trajectories and extract expressions
     if (data.trajectories && data.trajectories.length > 0) {
-        state.trajectories = data.trajectories.map(t => ({
-            id: t.id || generateId(),
-            name: t.name || 'Trajectory',
-            waypoints: t.waypoints || [],
-            constraints: t.constraints || [],
-            eventMarkers: t.eventMarkers || [],
-            solverSettings: t.solverSettings || { samplesPerMeter: 20.0, minSamplesPerSegment: 3 },
-            trajectory: t.trajectory || null,
-            followsTrajectoryId: t.followsTrajectoryId || null
-        }));
+        state.trajectories = data.trajectories.map(t => {
+            const traj = {
+                id: t.id || generateId(),
+                name: t.name || 'Trajectory',
+                waypoints: [],
+                constraints: [],
+                eventMarkers: t.eventMarkers || [],
+                solverSettings: t.solverSettings || { samplesPerMeter: 20.0, minSamplesPerSegment: 3 },
+                trajectory: t.trajectory || null,
+                followsTrajectoryId: t.followsTrajectoryId || null
+            };
+
+            // Load waypoints and extract expressions
+            traj.waypoints = (t.waypoints || []).map((wpData, i) => {
+                const wp = { ...wpData };
+
+                // Extract _exp fields and populate expressionMap
+                const fields = ['x', 'y', 'heading', 'v_max', 'omega_max', 'intake_x', 'intake_y', 'intake_distance', 'intake_velocity_max', 'intake_velocity_slack'];
+                fields.forEach(field => {
+                    const expField = `${field}_exp`;
+                    if (wpData[expField]) {
+                        const key = `waypoint:${traj.id}:${i}:${field}`;
+                        state.expressionMap.set(key, wpData[expField]);
+                        delete wp[expField];  // Remove from waypoint object
+                    }
+                });
+
+                return wp;
+            });
+
+            // Load constraints and extract expressions
+            traj.constraints = (t.constraints || []).map(conData => {
+                const con = { ...conData };
+
+                // Extract params_exp and populate expressionMap
+                if (conData.params_exp) {
+                    Object.keys(conData.params_exp).forEach(field => {
+                        const key = `constraint:${traj.id}:${con.id}:${field}`;
+                        state.expressionMap.set(key, conData.params_exp[field]);
+                    });
+                    delete con.params_exp;  // Remove from constraint object
+                }
+
+                return con;
+            });
+
+            return traj;
+        });
     } else {
         state.trajectories = [createDefaultTrajectory()];
     }
@@ -166,6 +278,11 @@ export function deserializeProject(data) {
     // Update field size input
     fieldSizeInput.value = state.fieldSize;
 
+    // Re-evaluate all expressions to sync computed values
+    if (window.reevaluateAllExpressions) {
+        window.reevaluateAllExpressions();
+    }
+
     state.hasUnsavedChanges = false;
     updateProjectNameDisplay();
     updateTrajectoryListFn();
@@ -174,6 +291,11 @@ export function deserializeProject(data) {
     updateSolverSettingsFromActiveTrajectoryFn();
     updatePlaybackControlsFn();
     renderFn();
+
+    // Render variables panel
+    if (window.renderVariablesPanel) {
+        window.renderVariablesPanel();
+    }
 }
 
 export async function showOpenModal() {

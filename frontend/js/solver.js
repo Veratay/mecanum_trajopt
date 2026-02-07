@@ -89,6 +89,11 @@ export async function solve() {
         return;
     }
 
+    // Re-evaluate all expressions before solving to ensure values are up to date
+    if (window.reevaluateAllExpressions) {
+        window.reevaluateAllExpressions();
+    }
+
     showStatus('Solving...', 'loading');
     solveBtn.disabled = true;
 

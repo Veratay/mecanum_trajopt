@@ -3,10 +3,11 @@
  */
 
 import { WAYPOINT_RADIUS, HEADING_LINE_LENGTH, HEADING_HANDLE_RADIUS } from './constants.js';
-import { state, getActiveTrajectory, getTrajectoryById } from './state.js';
+import { state, getActiveTrajectory, getTrajectoryById, getWaypointExpressionKey } from './state.js';
 import { fieldToCanvas } from './canvas.js';
 import { syncAllFollowers } from './trajectories.js';
 import { computeEventMarkerTimestamps } from './solver.js';
+import { ExpressionEvaluator } from './expressions.js';
 
 // UI update callbacks (set during init)
 let updateTrajectoryListFn = null;
@@ -361,9 +362,56 @@ export function updateWaypointField(index, field, value) {
         return;
     }
 
-    const numValue = parseFloat(value);
-    if (isNaN(numValue)) return;
+    // Try to evaluate as expression
+    const evaluator = new ExpressionEvaluator(state.variables.vars);
+    const result = evaluator.evaluate(value);
 
+    if (!result.success) {
+        // If evaluation failed, try as plain number
+        const numValue = parseFloat(value);
+        if (isNaN(numValue)) {
+            console.warn(`Invalid value for ${field}: ${value} (${result.error})`);
+            return;
+        }
+
+        // It's a plain number, remove any expression
+        const expressionKey = getWaypointExpressionKey(traj.id, index, field);
+        state.expressionMap.delete(expressionKey);
+
+        // Apply the value
+        applyWaypointValue(traj, index, field, numValue);
+        updateWaypointListFn();
+        return;
+    }
+
+    // Expression evaluated successfully
+    const wp = traj.waypoints[index];
+
+    // Don't allow editing position/heading of chained first waypoint
+    if (index === 0 && traj.followsTrajectoryId) {
+        if (field === 'x' || field === 'y' || field === 'heading') {
+            return;
+        }
+    }
+
+    // Store the expression if it contains variables or operators
+    const expressionKey = getWaypointExpressionKey(traj.id, index, field);
+    const vars = evaluator.extractVariables(value);
+
+    if (vars.size > 0 || value.match(/[+\-*/()]/)) {
+        // This is an expression, not a literal
+        state.expressionMap.set(expressionKey, value);
+    } else {
+        // This is a literal number, remove expression
+        state.expressionMap.delete(expressionKey);
+    }
+
+    // Apply the computed value
+    applyWaypointValue(traj, index, field, result.value);
+}
+
+// Helper function to apply a waypoint value
+function applyWaypointValue(traj, index, field, numValue) {
     const wp = traj.waypoints[index];
 
     // Don't allow editing position/heading of chained first waypoint
@@ -593,16 +641,25 @@ export function updateWaypointList() {
                             <div class="wp-input-grid ${wp.type === 'constrained' ? 'triple' : ''}">
                                 <div class="wp-input-group">
                                     <label>X (m)</label>
-                                    <input type="number" step="0.01" value="${wp.x.toFixed(2)}" data-index="${i}" data-field="x" ${isLockedFirst ? 'disabled' : ''}>
+                                    <input type="text" step="0.01"
+                                           value="${getWaypointFieldDisplay(traj.id, i, 'x', wp.x)}"
+                                           class="${hasExpression(traj.id, i, 'x') ? 'has-expression' : ''}"
+                                           data-index="${i}" data-field="x" ${isLockedFirst ? 'disabled' : ''}>
                                 </div>
                                 <div class="wp-input-group">
                                     <label>Y (m)</label>
-                                    <input type="number" step="0.01" value="${wp.y.toFixed(2)}" data-index="${i}" data-field="y" ${isLockedFirst ? 'disabled' : ''}>
+                                    <input type="text" step="0.01"
+                                           value="${getWaypointFieldDisplay(traj.id, i, 'y', wp.y)}"
+                                           class="${hasExpression(traj.id, i, 'y') ? 'has-expression' : ''}"
+                                           data-index="${i}" data-field="y" ${isLockedFirst ? 'disabled' : ''}>
                                 </div>
                                 ${wp.type === 'constrained' ? `
                                     <div class="wp-input-group">
                                         <label>Heading (°)</label>
-                                        <input type="number" step="1" value="${headingDeg}" data-index="${i}" data-field="heading" ${isLockedFirst ? 'disabled' : ''}>
+                                        <input type="text" step="1"
+                                               value="${getWaypointFieldDisplay(traj.id, i, 'heading', headingDeg)}"
+                                               class="${hasExpression(traj.id, i, 'heading') ? 'has-expression' : ''}"
+                                               data-index="${i}" data-field="heading" ${isLockedFirst ? 'disabled' : ''}>
                                     </div>
                                 ` : ''}
                             </div>
@@ -640,11 +697,17 @@ export function updateWaypointList() {
                             <div class="wp-input-grid">
                                 <div class="wp-input-group">
                                     <label>V max (m/s)</label>
-                                    <input type="number" step="0.1" min="0.1" value="${wp.v_max.toFixed(1)}" data-index="${i}" data-field="v_max">
+                                    <input type="text" step="0.1" min="0.1"
+                                           value="${getWaypointFieldDisplay(traj.id, i, 'v_max', wp.v_max.toFixed(1))}"
+                                           class="${hasExpression(traj.id, i, 'v_max') ? 'has-expression' : ''}"
+                                           data-index="${i}" data-field="v_max">
                                 </div>
                                 <div class="wp-input-group">
                                     <label>ω max (rad/s)</label>
-                                    <input type="number" step="0.5" min="0.1" value="${wp.omega_max.toFixed(1)}" data-index="${i}" data-field="omega_max">
+                                    <input type="text" step="0.5" min="0.1"
+                                           value="${getWaypointFieldDisplay(traj.id, i, 'omega_max', wp.omega_max.toFixed(1))}"
+                                           class="${hasExpression(traj.id, i, 'omega_max') ? 'has-expression' : ''}"
+                                           data-index="${i}" data-field="omega_max">
                                 </div>
                             </div>
                         ` : ''}
@@ -789,3 +852,18 @@ export function updateWaypointList() {
         });
     });
 }
+
+// Helper functions for expression display
+function hasExpression(trajId, wpIndex, field) {
+    const key = getWaypointExpressionKey(trajId, wpIndex, field);
+    return state.expressionMap.has(key);
+}
+
+function getWaypointFieldDisplay(trajId, wpIndex, field, defaultValue) {
+    const key = getWaypointExpressionKey(trajId, wpIndex, field);
+    const expr = state.expressionMap.get(key);
+    return expr || defaultValue;
+}
+
+// Expose renderWaypointsList for variables.js to call
+window.renderWaypointsList = updateWaypointList;

@@ -3,8 +3,9 @@
  */
 
 import { CONSTRAINT_TYPES } from './constants.js';
-import { state, getActiveTrajectory, generateId } from './state.js';
+import { state, getActiveTrajectory, generateId, getConstraintExpressionKey } from './state.js';
 import { getScale, fieldToCanvas } from './canvas.js';
+import { ExpressionEvaluator } from './expressions.js';
 
 // UI update callbacks (set during init)
 let updateTrajectoryListFn = null;
@@ -217,10 +218,36 @@ export function updateConstraintField(index, field, value) {
     } else if (field === 'enabled') {
         constraint.enabled = value;
     } else {
-        // It's a param field
-        const numValue = parseFloat(value);
-        if (!isNaN(numValue)) {
+        // It's a param field - try to evaluate as expression
+        const evaluator = new ExpressionEvaluator(state.variables.vars);
+        const result = evaluator.evaluate(value);
+
+        if (!result.success) {
+            // If evaluation failed, try as plain number
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) {
+                console.warn(`Invalid value for ${field}: ${value} (${result.error})`);
+                return;
+            }
+
+            // It's a plain number, remove any expression
+            const expressionKey = getConstraintExpressionKey(traj.id, constraint.id, field);
+            state.expressionMap.delete(expressionKey);
             constraint.params[field] = numValue;
+        } else {
+            // Expression evaluated successfully
+            const expressionKey = getConstraintExpressionKey(traj.id, constraint.id, field);
+            const vars = evaluator.extractVariables(value);
+
+            if (vars.size > 0 || value.match(/[+\-*/()]/)) {
+                // This is an expression, not a literal
+                state.expressionMap.set(expressionKey, value);
+            } else {
+                // This is a literal number, remove expression
+                state.expressionMap.delete(expressionKey);
+            }
+
+            constraint.params[field] = result.value;
         }
     }
 
@@ -302,13 +329,19 @@ export function updateConstraintList() {
         }).join('');
 
         // Build params inputs
-        const paramsHtml = Object.entries(typeDef.params).map(([key, def]) => `
-            <div class="constraint-input-group">
-                <label>${def.label} (${def.unit})</label>
-                <input type="number" step="0.1" value="${(con.params[key] || def.default).toFixed(2)}"
-                       data-index="${i}" data-field="${key}">
-            </div>
-        `).join('');
+        const paramsHtml = Object.entries(typeDef.params).map(([key, def]) => {
+            const value = con.params[key] || def.default;
+            const display = getConstraintFieldDisplay(traj.id, con.id, key, value.toFixed(2));
+            const hasExpr = hasConstraintExpression(traj.id, con.id, key);
+            return `
+                <div class="constraint-input-group">
+                    <label>${def.label} (${def.unit})</label>
+                    <input type="text" step="0.1" value="${display}"
+                           class="${hasExpr ? 'has-expression' : ''}"
+                           data-index="${i}" data-field="${key}">
+                </div>
+            `;
+        }).join('');
 
         const paramsClass = Object.keys(typeDef.params).length <= 1 ? 'single' :
                            Object.keys(typeDef.params).length === 3 ? 'triple' : '';
@@ -377,7 +410,7 @@ export function updateConstraintList() {
         select.addEventListener('click', e => e.stopPropagation());
     });
 
-    constraintListEl.querySelectorAll('input[type="number"]').forEach(input => {
+    constraintListEl.querySelectorAll('input[type="number"], input[type="text"]').forEach(input => {
         input.addEventListener('change', (e) => {
             e.stopPropagation();
             updateConstraintField(parseInt(input.dataset.index), input.dataset.field, input.value);
@@ -392,3 +425,18 @@ export function updateConstraintList() {
         });
     });
 }
+
+// Helper functions for expression display
+function hasConstraintExpression(trajId, constraintId, field) {
+    const key = getConstraintExpressionKey(trajId, constraintId, field);
+    return state.expressionMap.has(key);
+}
+
+function getConstraintFieldDisplay(trajId, constraintId, field, defaultValue) {
+    const key = getConstraintExpressionKey(trajId, constraintId, field);
+    const expr = state.expressionMap.get(key);
+    return expr || defaultValue;
+}
+
+// Expose renderConstraintsList for variables.js to call
+window.renderConstraintsList = updateConstraintList;

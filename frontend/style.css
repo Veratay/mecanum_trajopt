@@ -1808,9 +1808,9 @@ body {
         display: flex;
     }
 
-    /* Close button for overlay panels */
+    /* Close button for overlay panels - show on small screens */
     .panel-close-btn {
-        display: none;
+        display: flex;
         position: absolute;
         top: 10px;
         right: 10px;
@@ -1833,35 +1833,28 @@ body {
         color: var(--text-primary);
     }
 
-    /* Show close button on small screens */
-    @media (max-width: 900px) {
-        .panel-close-btn {
-            display: flex;
-        }
+    /* Ensure panel headers have enough padding to not overlap close button */
+    .panel-left .panel-header:first-child {
+        padding-right: 52px;
+    }
 
-        /* Ensure panel headers have enough padding to not overlap close button */
-        .panel-left .panel-header:first-child {
-            padding-right: 52px;
-        }
+    /* For right panel, the close button is above the controls bar */
+    .panel-right .panel-close-btn {
+        top: calc(var(--toolbar-height) + 10px);
+    }
 
-        /* For right panel, the close button is above the controls bar */
-        .panel-right .panel-close-btn {
-            top: calc(var(--toolbar-height) + 10px);
-        }
+    .panel-right .settings-section:first-child .section-header {
+        padding-right: var(--space-md);
+    }
 
-        .panel-right .settings-section:first-child .section-header {
-            padding-right: var(--space-md);
-        }
+    /* Show full button text in overlay mode (wider panels) */
+    .panel-controls-bar .btn .btn-text {
+        display: inline;
+    }
 
-        /* Show full button text in overlay mode (wider panels) */
-        .panel-controls-bar .btn .btn-text {
-            display: inline;
-        }
-
-        .panel-controls-bar .btn {
-            font-size: 11px;
-            padding: 6px 10px;
-        }
+    .panel-controls-bar .btn {
+        font-size: 11px;
+        padding: 6px 10px;
     }
 }
 
@@ -1912,6 +1905,11 @@ body {
 .panel-overlay.visible {
     display: block;
     opacity: 1;
+}
+
+/* Panel close button - hidden by default, shown in overlay mode */
+.panel-close-btn {
+    display: none;
 }
 
 /* ============================================
@@ -2494,4 +2492,111 @@ body {
 .constraint-tools .tool-btn[data-tool="heading-tangent"].active {
     background: rgba(168, 85, 247, 0.2);
     color: #a855f7;
+}
+
+/* Variables Panel */
+#variables-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+.variable-item {
+    display: grid;
+    grid-template-columns: 1fr 80px 32px;
+    gap: var(--space-xs);
+    align-items: center;
+}
+
+.variable-name {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.variable-name.linked {
+    color: var(--accent-primary);
+    font-style: italic;
+}
+
+.variable-value {
+    width: 100%;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 6px;
+    background: var(--bg-level-2);
+    border: 1px solid var(--border-subtle);
+    border-radius: 3px;
+    color: var(--text-primary);
+}
+
+.variable-value.linked-input {
+    background: var(--bg-level-1);
+    border-color: var(--accent-primary);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.linked-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-xs);
+    margin-bottom: var(--space-sm);
+    border: 1px dashed var(--accent-primary);
+    border-radius: 4px;
+    background: rgba(59, 130, 246, 0.1);
+    font-size: 11px;
+    color: var(--accent-primary);
+}
+
+.linked-text {
+    font-family: var(--font-mono);
+    flex: 1;
+}
+
+.empty-state {
+    padding: var(--space-md);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 12px;
+}
+
+/* Expression indicators */
+.has-expression {
+    border-left: 3px solid var(--accent-primary);
+    font-family: var(--font-mono);
+}
+
+.expression-error {
+    border-color: var(--accent-danger);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.expression-hint {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    margin-top: 2px;
+}
+
+/* Header actions for add button */
+.header-actions {
+    display: flex;
+    gap: var(--space-xs);
+    margin-left: auto;
+    margin-right: var(--space-xs);
+}
+
+.btn-icon.btn-small {
+    width: 24px;
+    height: 24px;
+    padding: 4px;
+}
+
+.btn-icon.btn-small svg {
+    width: 12px;
+    height: 12px;
 }

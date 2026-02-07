@@ -320,6 +320,14 @@
             <section class="settings-section collapsed">
                 <div class="section-header" data-collapse="robot-params">
                     <h2>Robot</h2>
+                    <div class="header-actions">
+                        <button class="btn-icon" id="link-robot-params-btn" title="Link from Project">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+                                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+                            </svg>
+                        </button>
+                    </div>
                     <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <polyline points="6 9 12 15 18 9"/>
                     </svg>
@@ -425,6 +433,33 @@
                         <input type="range" id="control-effort-weight" min="0" max="1" step="0.01" value="0">
                         <span id="control-effort-weight-value" class="slider-value">0.00</span>
                     </div>
+                </div>
+            </section>
+
+            <!-- Variables -->
+            <section class="settings-section collapsed">
+                <div class="section-header" data-collapse="variables-section">
+                    <h2>Variables</h2>
+                    <div class="header-actions">
+                        <button class="btn-icon" id="link-variables-btn" title="Link from Project">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/>
+                                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon" id="add-variable-btn" title="Add Variable">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="section-content" id="variables-section">
+                    <div id="variables-list"></div>
                 </div>
             </section>
 

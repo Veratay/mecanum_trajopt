@@ -30,6 +30,18 @@ export const state = {
     hasUnsavedChanges: false,
     backgroundImageFilename: null,  // server-stored image reference
 
+    // Variables and Expressions
+    variables: {
+        vars: new Map(),  // Map<varName, { value: number, linkedFrom: string|null }>
+        linkedFrom: null  // projectFilename if variables are linked
+    },
+    expressionMap: new Map(),  // Map<expressionKey, expression string>
+
+    // Robot Parameters (will track linkedFrom)
+    robotParams: {
+        linkedFrom: null  // projectFilename if robot params are linked
+    },
+
     // Field
     fieldSize: 3.66, // meters
 
@@ -101,4 +113,21 @@ export function getTrajectoryById(id) {
 
 export function getTrajectoryIndex(id) {
     return state.trajectories.findIndex(t => t.id === id);
+}
+
+// Expression key helpers
+export function getWaypointExpressionKey(trajId, wpIndex, field) {
+    return `waypoint:${trajId}:${wpIndex}:${field}`;
+}
+
+export function getConstraintExpressionKey(trajId, constraintId, field) {
+    return `constraint:${trajId}:${constraintId}:${field}`;
+}
+
+export function getRobotParamExpressionKey(field) {
+    return `robotParam:${field}`;
+}
+
+export function getSolverSettingExpressionKey(trajId, field) {
+    return `solverSetting:${trajId}:${field}`;
 }

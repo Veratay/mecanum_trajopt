@@ -31,6 +31,8 @@ import {
     initBackground, handleBackgroundImageSelect, clearBackgroundImage, handleBgSettingChange,
     handleFieldSizeChange
 } from './background.js';
+import { initVariablesPanel } from './variables.js';
+import { initLinking } from './linking.js';
 
 // Tool buttons
 let toolButtons = null;
@@ -224,6 +226,10 @@ function init() {
         bgImageInput, bgControls, bgScaleSlider, bgRotationSlider,
         bgOpacitySlider, bgMirrorH, bgMirrorV
     });
+
+    initVariablesPanel();
+
+    initLinking();
 
     initEvents(callbacks, {
         mousePosEl, openModal, saveModal, syncModal
