@@ -284,6 +284,7 @@ function updateValueFromExpression(key, value) {
         const traj = state.trajectories.find(t => t.id === trajId);
         if (traj && traj.waypoints[wpIndex]) {
             const wp = traj.waypoints[wpIndex];
+            const oldValue = wp[field];
 
             switch (field) {
                 case 'x': wp.x = value; break;
@@ -293,8 +294,11 @@ function updateValueFromExpression(key, value) {
                 case 'omega_max': wp.omega_max = value; break;
             }
 
-            // Mark trajectory as needing re-solve
-            traj.trajectory = null;
+            // Only mark trajectory as needing re-solve if value actually changed
+            const epsilon = 1e-9;
+            if (Math.abs(value - oldValue) > epsilon) {
+                traj.trajectory = null;
+            }
         }
     } else if (parts[0] === 'constraint') {
         const trajId = parts[1];
@@ -305,10 +309,14 @@ function updateValueFromExpression(key, value) {
         if (traj) {
             const constraint = traj.constraints.find(c => c.id === constraintId);
             if (constraint && constraint.params) {
+                const oldValue = constraint.params[field];
                 constraint.params[field] = value;
 
-                // Mark trajectory as needing re-solve
-                traj.trajectory = null;
+                // Only mark trajectory as needing re-solve if value actually changed
+                const epsilon = 1e-9;
+                if (Math.abs(value - oldValue) > epsilon) {
+                    traj.trajectory = null;
+                }
             }
         }
     }

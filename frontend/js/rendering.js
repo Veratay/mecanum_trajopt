@@ -2,13 +2,17 @@
  * Canvas rendering functions
  */
 
-import { ROBOT_WIDTH, ROBOT_LENGTH, WAYPOINT_RADIUS, HEADING_LINE_LENGTH, HEADING_HANDLE_RADIUS } from './constants.js';
+import { WAYPOINT_RADIUS, HEADING_LINE_LENGTH, HEADING_HANDLE_RADIUS } from './constants.js';
 import { state, getActiveTrajectory, getTrajectoryById } from './state.js';
 import { canvas, ctx, getScale, fieldToCanvas } from './canvas.js';
 import { getChainRobotStateAtTime } from './playback.js';
+import { getRobotParams } from './solver.js';
 
 export function render() {
     const size = canvas.width;
+
+    // Get robot params once for the entire render
+    const robotParams = getRobotParams();
 
     // Clear
     ctx.fillStyle = '#1a1d24';
@@ -32,7 +36,7 @@ export function render() {
         // Draw all trajectories in the chain
         chain.forEach(traj => {
             if (traj.trajectory) {
-                drawTrajectory(traj.trajectory);
+                drawTrajectory(traj.trajectory, robotParams);
             }
         });
 
@@ -49,7 +53,7 @@ export function render() {
         // Draw robot at chain playback position
         const robotState = getChainRobotStateAtTime(state.playbackTime);
         if (robotState) {
-            drawRobotAt(robotState.x, robotState.y, robotState.theta);
+            drawRobotAt(robotState.x, robotState.y, robotState.theta, robotParams);
         }
         return;
     }
@@ -64,7 +68,7 @@ export function render() {
     // Draw active trajectory
     const activeTraj = getActiveTrajectory();
     if (activeTraj && activeTraj.trajectory) {
-        drawTrajectory(activeTraj.trajectory);
+        drawTrajectory(activeTraj.trajectory, robotParams);
     }
 
     // Draw waypoints for active trajectory
@@ -77,7 +81,7 @@ export function render() {
 
     // Draw robot at playback time
     if (activeTraj && activeTraj.trajectory) {
-        drawRobotAtTime(state.playbackTime);
+        drawRobotAtTime(state.playbackTime, robotParams);
     }
 }
 
@@ -557,7 +561,7 @@ function drawIntakeWaypoint(wp, index, isSelected) {
     ctx.fillText(String(index + 1), intakePos.x, intakePos.y - markerSize - 12);
 }
 
-export function drawTrajectory(trajectory) {
+export function drawTrajectory(trajectory, robotParams) {
     if (!trajectory || trajectory.states.length < 2) return;
 
     const states = trajectory.states;
@@ -578,15 +582,15 @@ export function drawTrajectory(trajectory) {
 
     // Draw robot poses
     for (let i = 0; i < states.length; i++) {
-        drawRobotPose(states[i][3], states[i][4], states[i][5], 0.25);
+        drawRobotPose(states[i][3], states[i][4], states[i][5], 0.25, robotParams);
     }
 }
 
-function drawRobotPose(x, y, theta, alpha = 1.0) {
+function drawRobotPose(x, y, theta, alpha = 1.0, robotParams) {
     const pos = fieldToCanvas(x, y);
     const scale = getScale();
-    const halfW = ROBOT_WIDTH * scale / 2;
-    const halfL = ROBOT_LENGTH * scale / 2;
+    const halfW = robotParams.ly * scale;  // ly is half-width
+    const halfL = robotParams.lx * scale;  // lx is half-length
 
     ctx.save();
     ctx.translate(pos.x, pos.y);
@@ -594,7 +598,7 @@ function drawRobotPose(x, y, theta, alpha = 1.0) {
 
     ctx.strokeStyle = `rgba(240, 242, 245, ${alpha})`;
     ctx.lineWidth = 1;
-    ctx.strokeRect(-halfL, -halfW, ROBOT_LENGTH * scale, ROBOT_WIDTH * scale);
+    ctx.strokeRect(-halfL, -halfW, 2 * halfL, 2 * halfW);
 
     // Front indicator
     ctx.beginPath();
@@ -606,7 +610,7 @@ function drawRobotPose(x, y, theta, alpha = 1.0) {
     ctx.restore();
 }
 
-export function drawRobotAtTime(time) {
+export function drawRobotAtTime(time, robotParams) {
     const traj = getActiveTrajectory();
     if (!traj || !traj.trajectory) return;
 
@@ -632,25 +636,25 @@ export function drawRobotAtTime(time) {
     const py = s0[4] + alpha * (s1[4] - s0[4]);
     const theta = s0[5] + alpha * (s1[5] - s0[5]);
 
-    drawRobotAt(px, py, theta);
+    drawRobotAt(px, py, theta, robotParams);
 }
 
-export function drawRobotAt(px, py, theta) {
+export function drawRobotAt(px, py, theta, robotParams) {
     const pos = fieldToCanvas(px, py);
     const scale = getScale();
-    const halfW = ROBOT_WIDTH * scale / 2;
-    const halfL = ROBOT_LENGTH * scale / 2;
+    const halfW = robotParams.ly * scale;  // ly is half-width
+    const halfL = robotParams.lx * scale;  // lx is half-length
 
     ctx.save();
     ctx.translate(pos.x, pos.y);
     ctx.rotate(-theta);
 
     ctx.fillStyle = 'rgba(59, 130, 246, 0.7)';
-    ctx.fillRect(-halfL, -halfW, ROBOT_LENGTH * scale, ROBOT_WIDTH * scale);
+    ctx.fillRect(-halfL, -halfW, 2 * halfL, 2 * halfW);
 
     ctx.strokeStyle = '#60a5fa';
     ctx.lineWidth = 2;
-    ctx.strokeRect(-halfL, -halfW, ROBOT_LENGTH * scale, ROBOT_WIDTH * scale);
+    ctx.strokeRect(-halfL, -halfW, 2 * halfL, 2 * halfW);
 
     // Front indicator
     ctx.beginPath();

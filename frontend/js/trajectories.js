@@ -201,11 +201,11 @@ export function syncChainedWaypoint(trajId) {
 
 export function syncAllFollowers(trajId) {
     // Find all trajectories that follow this one and sync their first waypoints
+    // Don't invalidate - just sync the waypoint values
     state.trajectories.forEach(t => {
         if (t.followsTrajectoryId === trajId) {
             syncChainedWaypoint(t.id);
-            // Clear solved result since waypoint changed
-            t.trajectory = null;
+            // Don't clear trajectory - let it stay valid
             // Recursively sync any trajectories following this one
             syncAllFollowers(t.id);
         }
