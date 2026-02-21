@@ -4,6 +4,7 @@
 
 import { state, getActiveTrajectory } from './state.js';
 import { syncAllFollowers } from './trajectories.js';
+import { mirrorTrajectoryResult } from './mirror.js';
 
 // UI update callbacks (set during init)
 let updateTrajectoryListFn = null;
@@ -123,6 +124,9 @@ export async function solve() {
         if (response.ok) {
             traj.trajectory = result.trajectory;
             traj.trajectory.totalTime = result.total_time;
+
+            // Generate mirrored trajectory automatically
+            traj.mirroredTrajectory = mirrorTrajectoryResult(traj.trajectory);
 
             if (result.success) {
                 showStatus('Solution found!', 'success');
