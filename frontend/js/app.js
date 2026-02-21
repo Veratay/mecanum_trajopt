@@ -33,6 +33,9 @@ import {
 } from './background.js';
 import { initVariablesPanel } from './variables.js';
 import { initLinking } from './linking.js';
+import {
+    initFragments, updateFragmentList, addFragment, saveTrajectoryAsFragment
+} from './fragments.js';
 
 // Tool buttons
 let toolButtons = null;
@@ -148,6 +151,11 @@ function init() {
     const bgMirrorH = document.getElementById('bg-mirror-h');
     const bgMirrorV = document.getElementById('bg-mirror-v');
 
+    const fragmentListEl = document.getElementById('fragment-list');
+    const fragmentCountEl = document.getElementById('fragment-count');
+    const addFragmentBtn = document.getElementById('add-fragment-btn');
+    const saveAsFragmentBtn = document.getElementById('save-as-fragment-btn');
+
     const openBtn = document.getElementById('open-btn');
     const saveBtn = document.getElementById('save-btn');
     const syncBtn = document.getElementById('sync-btn');
@@ -175,6 +183,7 @@ function init() {
         updateConstraintList,
         updateSolverSettingsFromActiveTrajectory,
         updatePlaybackControls,
+        updateFragmentList,
         getDefaultIntakeDistance,
         getDefaultIntakeVelocity,
         selectTool,
@@ -230,6 +239,8 @@ function init() {
     initVariablesPanel();
 
     initLinking();
+
+    initFragments(callbacks, { fragmentListEl, fragmentCountEl });
 
     initEvents(callbacks, {
         mousePosEl, openModal, saveModal, syncModal
@@ -294,6 +305,10 @@ function init() {
 
     // Trajectory controls
     addTrajectoryBtn.addEventListener('click', createTrajectory);
+
+    // Fragment management
+    addFragmentBtn.addEventListener('click', addFragment);
+    saveAsFragmentBtn.addEventListener('click', saveTrajectoryAsFragment);
 
     // Project management
     openBtn.addEventListener('click', showOpenModal);
@@ -390,6 +405,7 @@ function init() {
     fitToView(render);
     updateTrajectoryList();
     updateConstraintList();
+    updateFragmentList();
     updateSolverSettingsFromActiveTrajectory();
     updateProjectNameDisplay();
     render();

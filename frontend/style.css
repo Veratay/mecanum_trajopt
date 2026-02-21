@@ -2582,6 +2582,302 @@ body {
     margin-top: 2px;
 }
 
+/* ============================================
+   TRAJECTORY GROUPS
+   ============================================ */
+
+.trajectory-group {
+    margin-bottom: var(--space-md);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: rgba(59, 130, 246, 0.03);
+    overflow: hidden;
+}
+
+.trajectory-group-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border-subtle);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.trajectory-group-header:hover {
+    background: var(--bg-hover);
+}
+
+.group-chain-icon {
+    color: var(--accent-primary);
+    flex-shrink: 0;
+    opacity: 0.7;
+}
+
+.group-name-display {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.group-traj-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--accent-primary);
+    background: rgba(59, 130, 246, 0.15);
+    padding: 1px 6px;
+    border-radius: 8px;
+    flex-shrink: 0;
+}
+
+.group-edit-btn {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+.group-edit-btn:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+}
+
+.trajectory-group-name-editor {
+    padding: var(--space-xs) var(--space-md);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.trajectory-group-name-editor input {
+    width: 100%;
+    padding: 4px 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.trajectory-group-name-editor input:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+.trajectory-group-items {
+    padding: var(--space-xs);
+}
+
+.trajectory-group-items .trajectory-item {
+    margin-bottom: var(--space-xs);
+}
+
+.trajectory-group-items .trajectory-item:last-child {
+    margin-bottom: 0;
+}
+
+/* ============================================
+   WAYPOINT FRAGMENTS
+   ============================================ */
+
+.fragment-count-badge {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    background: var(--bg-surface);
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.fragment-empty {
+    text-align: center;
+    padding: var(--space-lg);
+    color: var(--text-tertiary);
+}
+
+.fragment-empty-text {
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.fragment-item {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-sm);
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
+}
+
+.fragment-item:hover {
+    border-color: var(--border-default);
+}
+
+.fragment-item.expanded .fragment-body {
+    display: block;
+}
+
+.fragment-header-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+}
+
+.fragment-header-row:hover {
+    background: var(--bg-hover);
+}
+
+.fragment-icon {
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+}
+
+.fragment-name {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.fragment-wp-count {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-tertiary);
+    flex-shrink: 0;
+}
+
+.fragment-apply-btn {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    padding: 3px 8px;
+    background: transparent;
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    color: var(--accent-primary);
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+}
+
+.fragment-apply-btn:hover:not(:disabled) {
+    background: var(--accent-primary);
+    color: white;
+}
+
+.fragment-apply-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.fragment-delete-btn {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-tertiary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all var(--transition-fast);
+    opacity: 0;
+}
+
+.fragment-item:hover .fragment-delete-btn {
+    opacity: 1;
+}
+
+.fragment-delete-btn:hover {
+    background: var(--accent-danger);
+    color: white;
+}
+
+.fragment-body {
+    display: none;
+    padding: var(--space-sm) var(--space-md) var(--space-md);
+    border-top: 1px solid var(--border-subtle);
+}
+
+.fragment-name-edit {
+    margin-bottom: var(--space-sm);
+}
+
+.fragment-name-edit input {
+    width: 100%;
+    padding: 4px 8px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 12px;
+}
+
+.fragment-name-edit input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.fragment-waypoints-preview {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: var(--space-xs);
+    background: var(--bg-surface);
+    border-radius: var(--radius-sm);
+}
+
+.fragment-wp-preview {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-hover);
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.fragment-wp-arrow {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+
+.fragment-empty-notice {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    font-style: italic;
+    padding: var(--space-xs) 0;
+}
+
 /* Header actions for add button */
 .header-actions {
     display: flex;

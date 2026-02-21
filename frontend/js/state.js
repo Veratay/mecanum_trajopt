@@ -23,6 +23,14 @@ export function createDefaultTrajectory(name = 'Trajectory 1') {
     };
 }
 
+export function createFragment(name = 'Fragment 1') {
+    return {
+        id: generateId(),
+        name: name,
+        waypoints: []  // Same structure as trajectory waypoints
+    };
+}
+
 export const state = {
     // Project
     projectName: 'Untitled',
@@ -56,6 +64,12 @@ export const state = {
 
     // Tools
     currentTool: 'select', // 'select', 'constrained', 'unconstrained', 'intake'
+
+    // Waypoint Fragments (shared across project)
+    fragments: [],
+
+    // Trajectory Groups (names for chains of trajectories)
+    groupNames: new Map(),  // Map<rootTrajectoryId, groupName>
 
     // Trajectories collection
     trajectories: [createDefaultTrajectory()],
@@ -130,4 +144,13 @@ export function getRobotParamExpressionKey(field) {
 
 export function getSolverSettingExpressionKey(trajId, field) {
     return `solverSetting:${trajId}:${field}`;
+}
+
+// Fragment helpers
+export function getFragmentById(id) {
+    return state.fragments.find(f => f.id === id);
+}
+
+export function getFragmentIndex(id) {
+    return state.fragments.findIndex(f => f.id === id);
 }

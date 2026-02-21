@@ -43,6 +43,14 @@ export function deleteTrajectory(id) {
     const index = getTrajectoryIndex(id);
     if (index === -1) return;
 
+    // If this was a group root with a name, transfer it to the follower
+    const groupName = state.groupNames.get(id);
+    const follower = state.trajectories.find(t => t.followsTrajectoryId === id);
+    if (groupName && follower) {
+        state.groupNames.set(follower.id, groupName);
+    }
+    state.groupNames.delete(id);
+
     // Unlink any trajectories that follow this one
     state.trajectories.forEach(t => {
         if (t.followsTrajectoryId === id) {
@@ -154,6 +162,7 @@ export function setTrajectoryFollows(id, followsId) {
     // Clear if null or same
     if (!followsId || followsId === 'none') {
         traj.followsTrajectoryId = null;
+        markUnsavedFn();
         updateTrajectoryListFn();
         updateWaypointListFn();
         renderFn();
@@ -166,10 +175,30 @@ export function setTrajectoryFollows(id, followsId) {
     if (!canFollow(id)) return; // Our first wp must be constrained
     if (wouldCreateCycle(id, followsId)) return; // No cycles
 
+    // If this trajectory was a group root with a name, merge it into the target's group
+    const myGroupName = state.groupNames.get(id);
+    if (myGroupName) {
+        // Find the root of the target chain
+        let rootId = followsId;
+        const visited = new Set();
+        while (true) {
+            const t = getTrajectoryById(rootId);
+            if (!t || !t.followsTrajectoryId || visited.has(rootId)) break;
+            visited.add(rootId);
+            rootId = t.followsTrajectoryId;
+        }
+        // If the target chain doesn't have a name, use ours
+        if (!state.groupNames.has(rootId)) {
+            state.groupNames.set(rootId, myGroupName);
+        }
+        state.groupNames.delete(id);
+    }
+
     traj.followsTrajectoryId = followsId;
     syncChainedWaypoint(id);
     traj.trajectory = null; // Clear solved result
 
+    markUnsavedFn();
     updateTrajectoryListFn();
     updateWaypointListFn();
     renderFn();
@@ -210,6 +239,62 @@ export function syncAllFollowers(trajId) {
             syncAllFollowers(t.id);
         }
     });
+}
+
+/**
+ * Compute all trajectory groups (chains) from the follows relationships.
+ * Returns an array of groups, where each group is:
+ *   { rootId: string, trajectories: [traj, ...] }
+ * Single unchained trajectories are their own group.
+ */
+export function computeTrajectoryGroups() {
+    const assigned = new Set();
+    const groups = [];
+
+    // Find all root trajectories (not following anyone)
+    const roots = state.trajectories.filter(t => !t.followsTrajectoryId);
+
+    for (const root of roots) {
+        const group = { rootId: root.id, trajectories: [] };
+        let current = root;
+        const visited = new Set();
+
+        while (current && !visited.has(current.id)) {
+            group.trajectories.push(current);
+            assigned.add(current.id);
+            visited.add(current.id);
+
+            // Find the trajectory that follows this one
+            const follower = state.trajectories.find(t => t.followsTrajectoryId === current.id);
+            current = follower || null;
+        }
+
+        groups.push(group);
+    }
+
+    // Handle any trajectories not yet assigned (cycles or orphaned follows)
+    for (const traj of state.trajectories) {
+        if (!assigned.has(traj.id)) {
+            groups.push({ rootId: traj.id, trajectories: [traj] });
+            assigned.add(traj.id);
+        }
+    }
+
+    return groups;
+}
+
+export function renameGroup(rootId, name) {
+    if (name && name.trim()) {
+        state.groupNames.set(rootId, name.trim());
+    } else {
+        state.groupNames.delete(rootId);
+    }
+    markUnsavedFn();
+    updateTrajectoryListFn();
+}
+
+export function getGroupName(rootId) {
+    return state.groupNames.get(rootId) || null;
 }
 
 export function getTrajectoryChain(trajId) {
