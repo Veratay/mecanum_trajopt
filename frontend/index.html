@@ -436,6 +436,35 @@
                 </div>
             </section>
 
+            <!-- Waypoint Fragments -->
+            <section class="settings-section collapsed">
+                <div class="section-header" data-collapse="fragments-section">
+                    <h2>Fragments</h2>
+                    <span class="fragment-count-badge" id="fragment-count">0</span>
+                    <div class="header-actions">
+                        <button class="btn-icon" id="save-as-fragment-btn" title="Save Current Waypoints as Fragment">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                                <polyline points="17 21 17 13 7 13 7 21"/>
+                                <polyline points="7 3 7 8 15 8"/>
+                            </svg>
+                        </button>
+                        <button class="btn-icon" id="add-fragment-btn" title="Add Empty Fragment">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"/>
+                                <line x1="5" y1="12" x2="19" y2="12"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <svg class="collapse-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                </div>
+                <div class="section-content" id="fragments-section">
+                    <div id="fragment-list"></div>
+                </div>
+            </section>
+
             <!-- Variables -->
             <section class="settings-section collapsed">
                 <div class="section-header" data-collapse="variables-section">

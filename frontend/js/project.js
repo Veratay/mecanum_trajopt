@@ -11,6 +11,7 @@ let updateWaypointListFn = null;
 let updateConstraintListFn = null;
 let updateSolverSettingsFromActiveTrajectoryFn = null;
 let updatePlaybackControlsFn = null;
+let updateFragmentListFn = null;
 let renderFn = null;
 
 // DOM elements
@@ -37,6 +38,7 @@ export function initProject(callbacks, elements) {
     updateConstraintListFn = callbacks.updateConstraintList;
     updateSolverSettingsFromActiveTrajectoryFn = callbacks.updateSolverSettingsFromActiveTrajectory;
     updatePlaybackControlsFn = callbacks.updatePlaybackControls;
+    updateFragmentListFn = callbacks.updateFragmentList;
     renderFn = callbacks.render;
 
     projectNameEl = elements.projectNameEl;
@@ -71,7 +73,7 @@ export function updateProjectNameDisplay() {
 
 export function serializeProject() {
     return {
-        version: 3,
+        version: 4,
         name: state.projectName,
         updatedAt: new Date().toISOString(),
         fieldSize: state.fieldSize,
@@ -93,6 +95,19 @@ export function serializeProject() {
             ...getRobotParams(),
             linkedFrom: state.robotParams.linkedFrom
         },
+
+        // Waypoint fragments
+        fragments: state.fragments.map(f => ({
+            id: f.id,
+            name: f.name,
+            waypoints: f.waypoints.map(wp => ({ ...wp }))
+        })),
+
+        // Group names for trajectory chains
+        groupNames: Array.from(state.groupNames.entries()).map(([rootId, name]) => ({
+            rootId,
+            name
+        })),
 
         trajectories: state.trajectories.map(t => ({
             id: t.id,
@@ -149,6 +164,11 @@ export function deserializeProject(data) {
             data.robotParams.linkedFrom = null;
         }
     }
+    if (version < 4) {
+        // Migrate to v4: add empty fragments and group names
+        data.fragments = data.fragments || [];
+        data.groupNames = data.groupNames || [];
+    }
 
     // Reset state
     state.projectName = data.name || 'Untitled';
@@ -168,6 +188,21 @@ export function deserializeProject(data) {
         });
     }
     state.variables.linkedFrom = data.variables?.linkedFrom || null;
+
+    // Load fragments
+    state.fragments = (data.fragments || []).map(f => ({
+        id: f.id || generateId(),
+        name: f.name || 'Fragment',
+        waypoints: (f.waypoints || []).map(wp => ({ ...wp }))
+    }));
+
+    // Load group names
+    state.groupNames.clear();
+    if (data.groupNames) {
+        for (const gn of data.groupNames) {
+            state.groupNames.set(gn.rootId, gn.name);
+        }
+    }
 
     if (data.backgroundSettings) {
         state.backgroundSettings = { ...state.backgroundSettings, ...data.backgroundSettings };
@@ -290,6 +325,7 @@ export function deserializeProject(data) {
     updateConstraintListFn();
     updateSolverSettingsFromActiveTrajectoryFn();
     updatePlaybackControlsFn();
+    if (updateFragmentListFn) updateFragmentListFn();
     renderFn();
 
     // Render variables panel
@@ -430,6 +466,8 @@ export function newProject() {
     state.backgroundImageFilename = null;
     state.backgroundImage = null;
     state.fieldSize = 3.66;
+    state.fragments = [];
+    state.groupNames.clear();
     state.trajectories = [createDefaultTrajectory()];
     state.activeTrajectoryId = state.trajectories[0].id;
     state.selectedWaypointIndex = null;
@@ -447,6 +485,7 @@ export function newProject() {
     updateWaypointListFn();
     updateConstraintListFn();
     updatePlaybackControlsFn();
+    if (updateFragmentListFn) updateFragmentListFn();
     renderFn();
 
     openModal.style.display = 'none';
