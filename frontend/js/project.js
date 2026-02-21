@@ -4,6 +4,7 @@
 
 import { state, createDefaultTrajectory, generateId } from './state.js';
 import { getRobotParams } from './solver.js';
+import { mirrorProjectData, mirrorTrajectoryResult } from './mirror.js';
 
 // UI update callbacks (set during init)
 let updateTrajectoryListFn = null;
@@ -224,6 +225,7 @@ export function deserializeProject(data) {
                 eventMarkers: t.eventMarkers || [],
                 solverSettings: t.solverSettings || { samplesPerMeter: 20.0, minSamplesPerSegment: 3 },
                 trajectory: t.trajectory || null,
+                mirroredTrajectory: t.trajectory ? mirrorTrajectoryResult(t.trajectory) : null,
                 followsTrajectoryId: t.followsTrajectoryId || null
             };
 
@@ -306,12 +308,15 @@ export async function showOpenModal() {
         const response = await fetch('/projects');
         const data = await response.json();
 
-        if (data.projects.length === 0) {
+        // Filter out auto-generated mirrored files
+        const projects = data.projects.filter(p => !p.filename.endsWith('_mirrored.json'));
+
+        if (projects.length === 0) {
             projectListEl.innerHTML = '<div class="project-empty">No saved projects</div>';
             return;
         }
 
-        projectListEl.innerHTML = data.projects.map(p => {
+        projectListEl.innerHTML = projects.map(p => {
             const date = p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : '';
             return `
                 <div class="project-item" data-filename="${p.filename}">
@@ -370,6 +375,10 @@ async function deleteProject(filename) {
     try {
         const response = await fetch(`/projects/${filename}`, { method: 'DELETE' });
         if (!response.ok) throw new Error('Failed to delete project');
+
+        // Also delete the mirrored version if it exists
+        const mirroredFilename = getMirroredFilename(filename);
+        await fetch(`/projects/${mirroredFilename}`, { method: 'DELETE' }).catch(() => {});
     } catch (error) {
         alert(`Error deleting project: ${error.message}`);
     }
@@ -380,6 +389,17 @@ export function showSaveModal() {
     saveModal.style.display = 'flex';
     projectNameInput.focus();
     projectNameInput.select();
+}
+
+/**
+ * Derive the mirrored filename from the original filename.
+ * "my-project.json" -> "my-project_mirrored.json"
+ */
+function getMirroredFilename(filename) {
+    if (filename.endsWith('.json')) {
+        return filename.slice(0, -5) + '_mirrored.json';
+    }
+    return filename + '_mirrored';
 }
 
 export async function saveProject() {
@@ -397,6 +417,7 @@ export async function saveProject() {
         confirmSaveBtn.disabled = true;
         confirmSaveBtn.textContent = 'Saving...';
 
+        // Save original project
         const response = await fetch(`/projects/${state.projectFilename}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -407,6 +428,22 @@ export async function saveProject() {
 
         const result = await response.json();
         state.projectFilename = result.filename;
+
+        // Save mirrored version automatically
+        const mirroredData = mirrorProjectData(projectData);
+        mirroredData.name = name + ' (Mirrored)';
+        const mirroredFilename = getMirroredFilename(state.projectFilename);
+
+        const mirrorResponse = await fetch(`/projects/${mirroredFilename}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(mirroredData)
+        });
+
+        if (!mirrorResponse.ok) {
+            console.warn('Failed to save mirrored project');
+        }
+
         state.hasUnsavedChanges = false;
         updateProjectNameDisplay();
         saveModal.style.display = 'none';
@@ -505,6 +542,7 @@ export async function syncToAndroid() {
         confirmSyncBtn.textContent = 'Syncing...';
         syncStatusEl.innerHTML = '<div class="sync-checking">Pushing to device...</div>';
 
+        // Push original file
         const response = await fetch('/adb/push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -513,20 +551,35 @@ export async function syncToAndroid() {
 
         const data = await response.json();
 
-        if (response.ok) {
-            syncStatusEl.innerHTML = `
-                <div class="sync-success">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
-                        <polyline points="22 4 12 14.01 9 11.01"/>
-                    </svg>
-                    Successfully synced!
-                </div>
-                <p class="sync-info">File saved to: <code>${data.path}</code></p>
-            `;
-        } else {
+        if (!response.ok) {
             throw new Error(data.detail || 'Sync failed');
         }
+
+        // Push mirrored file
+        const mirroredFilename = getMirroredFilename(state.projectFilename);
+        let mirrorSynced = false;
+        try {
+            const mirrorResponse = await fetch('/adb/push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: mirroredFilename })
+            });
+            mirrorSynced = mirrorResponse.ok;
+        } catch {
+            // Mirrored file may not exist yet if project was never saved
+        }
+
+        syncStatusEl.innerHTML = `
+            <div class="sync-success">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                    <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+                Successfully synced!
+            </div>
+            <p class="sync-info">File saved to: <code>${data.path}</code></p>
+            ${mirrorSynced ? '<p class="sync-info">Mirrored file also synced.</p>' : ''}
+        `;
     } catch (error) {
         syncStatusEl.innerHTML = `<div class="sync-error">Sync failed: ${error.message}</div>`;
     } finally {
